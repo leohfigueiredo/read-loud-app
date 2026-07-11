@@ -35,8 +35,7 @@ export function initGemini(apiKey) {
 export async function generateAdvancedTTS(text, options = {}) {
   const {
     voiceName = 'Aoede',
-    speed = 1.0, // 0.5 - 2.0
-    startByteOffset = 0
+    speed = 1.0 // 0.5 - 2.0
   } = options;
 
   if (!rawApiKey) {

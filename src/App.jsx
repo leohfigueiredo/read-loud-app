@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Library from './components/Library/Library';
+import LibraryModern from './components/Library/LibraryModern';
 import Reader from './components/Reader/Reader';
 import { settingsDB } from './services/storage';
 
@@ -34,8 +34,7 @@ function App() {
     <Router>
       <div className="app-container">
         <Routes>
-          {/* We will pass theme togglers to Library/Settings later if needed */}
-          <Route path="/" element={<Library theme={theme} setTheme={setTheme} bionic={bionic} setBionic={setBionic} />} />
+          <Route path="/" element={<LibraryModern theme={theme} setTheme={setTheme} bionic={bionic} setBionic={setBionic} />} />
           <Route path="/read/:id" element={<Reader theme={theme} bionic={bionic} setTheme={setTheme} setBionic={setBionic} />} />
         </Routes>
       </div>
