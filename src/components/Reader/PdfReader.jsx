@@ -5,7 +5,7 @@ import { saveBook } from '../../services/storage';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-export default function PdfReader({ file, metadata, onTextExtract, bookId }) {
+export default function PdfReader({ file, metadata, onTextExtract, bookId, theme }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(parseInt(metadata.progressLocation) || 1);
   const canvasRef = useRef(null);
@@ -143,7 +143,16 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId }) {
 
       {/* Canvas with 3D perspective wrapper */}
       <div ref={wrapperRef} style={{ width: '100%', display: 'flex', justifyContent: 'center', transformStyle: 'preserve-3d' }}>
-        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', marginTop: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }} />
+        <canvas 
+          ref={canvasRef} 
+          style={{ 
+            maxWidth: '100%', 
+            height: 'auto', 
+            marginTop: '1rem', 
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            filter: theme === 'dark' ? 'invert(0.9) hue-rotate(180deg)' : theme === 'night' ? 'sepia(0.6) contrast(0.9) brightness(0.95)' : 'none'
+          }} 
+        />
       </div>
 
       {/* Navigation buttons */}

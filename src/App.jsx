@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LibraryModern from './components/Library/LibraryModern';
 import Reader from './components/Reader/Reader';
 import { settingsDB } from './services/storage';
+import { initGemini } from './services/gemini';
 
 function App() {
   const [theme, setTheme] = useState('light');
@@ -16,8 +17,10 @@ function App() {
     settingsDB.getItem('bionic').then(b => {
       if (b !== null) setBionic(b);
     });
-    
-    // We would load API keys here as well
+    // Load and initialize API key on startup
+    settingsDB.getItem('gemini_api_key').then(key => {
+      if (key) initGemini(key);
+    });
   }, []);
 
   // Apply preferences

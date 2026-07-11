@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
 import { saveBook } from '../../services/storage';
 
-export default function EpubReader({ file, metadata, onTextExtract, bookId }) {
+export default function EpubReader({ file, metadata, onTextExtract, bookId, theme }) {
   const viewerRef = useRef(null);
   const wrapperRef = useRef(null);
   const touchStartRef = useRef(null);
@@ -50,14 +50,21 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId }) {
           newRendition.display();
         }
 
-        // Animate AFTER the page is rendered
-        newRendition.on('rendered', () => {
-          if (viewerRef.current && onTextExtract) {
+        // Extract text using the view object provided by epubjs
+        newRendition.on('rendered', (section, view) => {
+          if (onTextExtract) {
             try {
-              const text = viewerRef.current.querySelector('iframe')?.contentDocument?.body?.innerText || '';
-              onTextExtract(text);
-            } catch (error) {
-              console.debug('Cross-origin iframe text extraction fallback:', error);
+              const text = view?.document?.body?.innerText
+                || view?.document?.body?.textContent
+                || '';
+              if (text.trim()) onTextExtract(text.trim());
+            } catch (e) {
+              // fallback: try via iframe
+              try {
+                const iframe = viewerRef.current?.querySelector('iframe');
+                const t = iframe?.contentDocument?.body?.innerText || '';
+                if (t.trim()) onTextExtract(t.trim());
+              } catch (_) {}
             }
           }
         });
@@ -103,6 +110,49 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId }) {
     if (file) loadEpub();
     return () => { if (newBook) newBook.destroy(); };
   }, [file, metadata, bookId, onTextExtract]);
+
+  // Inject styles to style EPUB text inside iframe dynamically
+  useEffect(() => {
+    if (!rendition) return;
+
+    const themeStyles = {
+      light: {
+        body: {
+          background: '#ffffff !important',
+          color: '#0f172a !important'
+        },
+        'p, span, li, h1, h2, h3, h4, h5, h6, a': {
+          color: '#0f172a !important'
+        }
+      },
+      dark: {
+        body: {
+          background: '#0f172a !important',
+          color: '#f8fafc !important'
+        },
+        'p, span, li, h1, h2, h3, h4, h5, h6, a': {
+          color: '#f8fafc !important'
+        }
+      },
+      night: {
+        body: {
+          background: '#fffbeb !important',
+          color: '#451a03 !important'
+        },
+        'p, span, li, h1, h2, h3, h4, h5, h6, a': {
+          color: '#451a03 !important'
+        }
+      }
+    };
+
+    // Register themes in epubjs
+    Object.entries(themeStyles).forEach(([name, rules]) => {
+      rendition.themes.register(name, rules);
+    });
+
+    // Select the current theme
+    rendition.themes.select(theme || 'light');
+  }, [theme, rendition]);
 
   const next = () => {
     if (rendition) rendition.next().then(() => animateIn('next'));

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Menu, Type, Maximize, Sparkles } from 'lucide-react';
+import { ArrowLeft, Menu, Type, Maximize, Minimize2, Sparkles } from 'lucide-react';
 import { getBook } from '../../services/storage';
 import PdfReader from './PdfReader';
 import FlowingPdfReader from './FlowingPdfReader';
@@ -17,7 +17,7 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
   const [bookData, setBookData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [ttsText, setTtsText] = useState("");
-  const [currentPageText, setCurrentPageText] = useState("Carregando texto da página...");
+  const [currentPageText, setCurrentPageText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [pdfMode, setPdfMode] = useState('canvas');
   const [cleanMode, setCleanMode] = useState(false);
@@ -131,12 +131,12 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
       <main className="reader-content">
         {bookData.metadata.type === 'pdf' ? (
           pdfMode === 'canvas' ? (
-            <PdfReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} />
+            <PdfReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} theme={theme} />
           ) : (
             <FlowingPdfReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} />
           )
         ) : (
-          <EpubReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} />
+          <EpubReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} theme={theme} />
         )}
       </main>
       
@@ -145,6 +145,16 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
            <SelectionMenu onReadAloud={handleReadAloud} />
            <TextToSpeech textToRead={ttsText || currentPageText} />
          </>
+      )}
+
+      {cleanMode && (
+        <button 
+          className="exit-clean-btn" 
+          onClick={toggleCleanMode}
+          title="Sair da Leitura Limpa (Minimizar)"
+        >
+          <Minimize2 size={20} />
+        </button>
       )}
 
       {showSettings && (
