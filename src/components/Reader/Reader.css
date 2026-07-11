@@ -1,0 +1,72 @@
+.reader-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-color);
+}
+
+.reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  z-index: 20;
+  min-height: 64px;
+}
+
+.reader-title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.reader-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+/* Mobile Optimization for Touch Targets */
+@media (max-width: 600px) {
+  .reader-header {
+    padding: 0.5rem;
+  }
+  
+  .icon-btn, .ai-option-btn, .secondary-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px; /* Larger touch area */
+  }
+
+  .reader-title {
+    font-size: 0.9rem;
+    max-width: 35%;
+  }
+
+  .ai-control-panel {
+    width: calc(100vw - 2rem);
+    margin: 1rem;
+  }
+}
+
+/* Base styles for inner readers */
+.pdf-reader-container, .epub-reader-container {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+  border-radius: 8px;
+  position: relative;
+}
