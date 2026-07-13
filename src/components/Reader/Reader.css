@@ -142,3 +142,12 @@
   opacity: 1;
   transform: scale(1.05);
 }
+
+/* TTS Paragraph Highlight */
+.tts-highlight {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-shadow: 0 0 4px rgba(245, 158, 11, 0.3);
+  transition: background-color var(--transition-normal);
+}

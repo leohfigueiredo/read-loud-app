@@ -1,10 +1,15 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { settingsDB } from './storage';
+import { settingsDB, trackApiUsage } from './storage';
 
 // Default model if none detected/saved yet
 let currentModel = 'gemini-2.5-flash';
 let aiInstance = null;
 let rawApiKey = '';
+
+// Memory caches to prevent duplicate billing
+const audioCache = new Map();
+const translationCache = new Map();
+const explanationCache = new Map();
 
 // Load the working model from DB on startup
 settingsDB.getItem('gemini_model').then(savedModel => {
@@ -13,8 +18,8 @@ settingsDB.getItem('gemini_model').then(savedModel => {
   }
 });
 
-// Initialize the Gemini SDK with the user's API Key
-export function initGemini(apiKey) {
+// Initialize the Gemini SDK with the user's API Key and selected model
+export function initGemini(apiKey, modelName = null) {
   if (!apiKey) {
     aiInstance = null;
     rawApiKey = '';
@@ -23,12 +28,16 @@ export function initGemini(apiKey) {
   rawApiKey = apiKey;
   aiInstance = new GoogleGenerativeAI(apiKey);
   
-  // Reload saved model preference
-  settingsDB.getItem('gemini_model').then(savedModel => {
-    if (savedModel) {
-      currentModel = savedModel;
-    }
-  });
+  if (modelName) {
+    currentModel = modelName;
+  } else {
+    // Reload saved model preference
+    settingsDB.getItem('gemini_model').then(savedModel => {
+      if (savedModel) {
+        currentModel = savedModel;
+      }
+    });
+  }
 }
 
 /**
@@ -95,8 +104,8 @@ export async function testGeminiConnection() {
   throw new Error(`Nenhum modelo disponível. Último erro: ${lastError}`);
 }
 
-// Helper to convert raw 16-bit PCM audio to a playable WAV data URL
-function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
+// Helper to convert raw 16-bit PCM audio to a playable WAV data URL using native high-performance Blob + FileReader
+async function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
   const rawBinary = atob(base64Pcm);
   const pcmLength = rawBinary.length;
   const buffer = new ArrayBuffer(44 + pcmLength);
@@ -123,23 +132,26 @@ function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
     uint8View[i] = rawBinary.charCodeAt(i);
   }
   
-  // Convert ArrayBuffer to Base64
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64Wav = btoa(binary);
-  return `data:audio/wav;base64,${base64Wav}`;
+  // High-performance Base64 conversion
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      resolve(reader.result); // already in "data:audio/wav;base64,..." format
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 export async function generateGeminiAudio(text, voiceName = 'Aoede') {
   if (!rawApiKey) throw new Error("Chave da API Gemini não configurada.");
   
+  const cacheKey = `${text.trim()}_${voiceName}`;
+  if (audioCache.has(cacheKey)) {
+    return audioCache.get(cacheKey);
+  }
+  
   const modelsForAudio = [
-    currentModel,
-    'gemini-3.5-flash',
     'gemini-2.5-flash',
     'gemini-2.5-flash-preview-tts',
     'gemini-3.1-flash-tts-preview'
@@ -178,15 +190,13 @@ export async function generateGeminiAudio(text, voiceName = 'Aoede') {
         const base64Audio = audioPart.inlineData.data;
         const mimeType = audioPart.inlineData.mimeType || '';
         
-        // Wrap raw PCM in a standard playable WAV container
-        if (mimeType.includes('pcm') || mimeType.includes('audio/wav') || mimeType === '' || mimeType.includes('octet-stream')) {
-          try {
-            return convertRawPcmToWav(base64Audio, 24000);
-          } catch (e) {
-            console.error("WAV wrapping failed, playing raw data:", e);
-          }
-        }
-        return `data:${mimeType};base64,${base64Audio}`;
+        const resultUrl = mimeType.includes('pcm') || mimeType.includes('audio/wav') || mimeType === '' || mimeType.includes('octet-stream')
+          ? await convertRawPcmToWav(base64Audio, 24000)
+          : `data:${mimeType};base64,${base64Audio}`;
+          
+        audioCache.set(cacheKey, resultUrl);
+        trackApiUsage('tts', text.length);
+        return resultUrl;
       }
     } catch (err) {
       lastErr = err;
@@ -200,6 +210,11 @@ export async function generateGeminiAudio(text, voiceName = 'Aoede') {
 export async function translateText(text, targetLanguage = 'Portuguese') {
   if (!aiInstance) throw new Error("Chave da API Gemini não configurada.");
   
+  const cacheKey = `${text.trim()}_${targetLanguage}`;
+  if (translationCache.has(cacheKey)) {
+    return translationCache.get(cacheKey);
+  }
+  
   const chunks = chunkText(text);
   const results = [];
 
@@ -210,17 +225,29 @@ export async function translateText(text, targetLanguage = 'Portuguese') {
     results.push(result.response.text());
   }
 
-  return results.join(' ');
+  const resultText = results.join(' ');
+  translationCache.set(cacheKey, resultText);
+  trackApiUsage('text', text.length);
+  return resultText;
 }
 
 export async function explainWord(word, context, language = 'Portuguese') {
   if (!aiInstance) throw new Error("Chave da API Gemini não configurada.");
   
+  const cacheKey = `${word.trim()}_${context.trim()}_${language}`;
+  if (explanationCache.has(cacheKey)) {
+    return explanationCache.get(cacheKey);
+  }
+  
   const prompt = `Explain the meaning of the word "${word}" in the context of the following sentence:\n"${context}"\n\nExplain it in ${language} concisely. Provide the definition and why it fits this context.`;
   const model = aiInstance.getGenerativeModel({ model: currentModel });
   const result = await model.generateContent(prompt);
   const response = await result.response;
-  return response.text();
+  const resultText = response.text();
+  
+  explanationCache.set(cacheKey, resultText);
+  trackApiUsage('text', word.length + context.length);
+  return resultText;
 }
 
 export async function generateCatchMeUp(text, language = 'Portuguese') {
@@ -234,6 +261,7 @@ export async function generateCatchMeUp(text, language = 'Portuguese') {
     const model = aiInstance.getGenerativeModel({ model: currentModel });
     const result = await model.generateContent(prompt);
     accumulatedSummary += result.response.text() + "\n\n";
+    trackApiUsage('text', chunk.length);
   }
 
   return accumulatedSummary;

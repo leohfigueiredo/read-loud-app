@@ -22,6 +22,7 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
   const [pdfMode, setPdfMode] = useState('canvas');
   const [cleanMode, setCleanMode] = useState(false);
   const [showAIControl, setShowAIControl] = useState(false);
+  const [customSelection, setCustomSelection] = useState(null);
 
   const toggleCleanMode = () => {
     if (!cleanMode) {
@@ -136,13 +137,17 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
             <FlowingPdfReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} />
           )
         ) : (
-          <EpubReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} theme={theme} />
+          <EpubReader file={bookData.file} metadata={bookData.metadata} bookId={id} onTextExtract={setCurrentPageText} onToggleUI={toggleCleanMode} theme={theme} onSelection={setCustomSelection} />
         )}
       </main>
       
       {!cleanMode && (
          <>
-           <SelectionMenu onReadAloud={handleReadAloud} />
+            <SelectionMenu 
+              onReadAloud={handleReadAloud} 
+              customSelection={customSelection} 
+              onClearSelection={() => setCustomSelection(null)} 
+            />
            <TextToSpeech textToRead={ttsText || currentPageText} />
          </>
       )}

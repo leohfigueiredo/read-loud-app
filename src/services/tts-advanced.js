@@ -29,10 +29,8 @@ export function initGemini(apiKey) {
   aiInstance = new GoogleGenerativeAI(apiKey);
 }
 
-/**
- * Helper to convert raw 16-bit PCM audio to a playable WAV data URL
- */
-function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
+// Helper to convert raw 16-bit PCM audio to a playable WAV data URL using native high-performance Blob + FileReader
+async function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
   const rawBinary = atob(base64Pcm);
   const pcmLength = rawBinary.length;
   const buffer = new ArrayBuffer(44 + pcmLength);
@@ -59,15 +57,15 @@ function convertRawPcmToWav(base64Pcm, sampleRate = 24000) {
     uint8View[i] = rawBinary.charCodeAt(i);
   }
   
-  // Convert ArrayBuffer to Base64
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64Wav = btoa(binary);
-  return `data:audio/wav;base64,${base64Wav}`;
+  // High-performance Base64 conversion
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      resolve(reader.result); // already in "data:audio/wav;base64,..." format
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
@@ -144,7 +142,7 @@ export async function generateAdvancedTTS(text, options = {}) {
       // Wrap raw PCM in a standard playable WAV container
       if (mimeType.includes('pcm') || mimeType.includes('audio/wav') || mimeType === '' || mimeType.includes('octet-stream')) {
         try {
-          return convertRawPcmToWav(base64Audio, 24000);
+          return await convertRawPcmToWav(base64Audio, 24000);
         } catch (e) {
           console.error("WAV wrapping failed, playing raw data:", e);
         }

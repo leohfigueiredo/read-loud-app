@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
 import { saveBook } from '../../services/storage';
 
-export default function EpubReader({ file, metadata, onTextExtract, bookId, theme }) {
+export default function EpubReader({ file, metadata, onTextExtract, bookId, theme, onSelection }) {
   const viewerRef = useRef(null);
   const wrapperRef = useRef(null);
   const touchStartRef = useRef(null);
@@ -58,13 +58,13 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
                 || view?.document?.body?.textContent
                 || '';
               if (text.trim()) onTextExtract(text.trim());
-            } catch (e) {
+            } catch {
               // fallback: try via iframe
               try {
                 const iframe = viewerRef.current?.querySelector('iframe');
                 const t = iframe?.contentDocument?.body?.innerText || '';
                 if (t.trim()) onTextExtract(t.trim());
-              } catch (_) {}
+              } catch {}
             }
           }
         });
@@ -101,6 +101,40 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
           }
         });
 
+        newRendition.on('selected', (cfiRange, contents) => {
+          const sel = contents.window.getSelection();
+          const text = sel.toString().trim();
+          if (text && onSelection) {
+            try {
+              const range = sel.getRangeAt(0);
+              const rect = range.getBoundingClientRect();
+              const iframe = viewerRef.current?.querySelector('iframe');
+              const iframeRect = iframe ? iframe.getBoundingClientRect() : { left: 0, top: 0 };
+              
+              onSelection({
+                text,
+                x: iframeRect.left + rect.left + (rect.width / 2),
+                y: iframeRect.top + rect.top + window.scrollY - 10
+              });
+            } catch (e) {
+              console.error("Selection calculation failed:", e);
+            }
+          }
+        });
+
+        newRendition.on('click', () => {
+          setTimeout(() => {
+            try {
+              const iframe = viewerRef.current?.querySelector('iframe');
+              const sel = iframe?.contentWindow?.getSelection();
+              const text = sel?.toString().trim() || '';
+              if (!text && onSelection) {
+                onSelection(null);
+              }
+            } catch {}
+          }, 100);
+        });
+
         setRendition(newRendition);
       } catch (err) {
         console.error('Error loading EPUB:', err);
@@ -109,7 +143,7 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
 
     if (file) loadEpub();
     return () => { if (newBook) newBook.destroy(); };
-  }, [file, metadata, bookId, onTextExtract]);
+  }, [file, metadata, bookId, onTextExtract, onSelection]);
 
   // Inject styles to style EPUB text inside iframe dynamically
   useEffect(() => {
@@ -148,6 +182,16 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
     // Register themes in epubjs
     Object.entries(themeStyles).forEach(([name, rules]) => {
       rendition.themes.register(name, rules);
+    });
+
+    rendition.themes.default({
+      '.tts-highlight': {
+        'background-color': 'rgba(245, 158, 11, 0.25) !important',
+        'border-radius': '4px',
+        'padding': '1px 3px',
+        'box-shadow': '0 0 3px rgba(245, 158, 11, 0.3)',
+        'transition': 'background-color 0.2s ease'
+      }
     });
 
     // Select the current theme

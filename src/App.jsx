@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LibraryModern from './components/Library/LibraryModern';
 import Reader from './components/Reader/Reader';
 import { settingsDB } from './services/storage';
-import { initGemini } from './services/gemini';
+import { initGemini as initGeminiCore } from './services/gemini';
+import { initGemini as initGeminiAdvanced } from './services/tts-advanced';
 
 function App() {
   const [theme, setTheme] = useState('light');
@@ -19,7 +20,10 @@ function App() {
     });
     // Load and initialize API key on startup
     settingsDB.getItem('gemini_api_key').then(key => {
-      if (key) initGemini(key);
+      if (key) {
+        initGeminiCore(key);
+        initGeminiAdvanced(key);
+      }
     });
   }, []);
 

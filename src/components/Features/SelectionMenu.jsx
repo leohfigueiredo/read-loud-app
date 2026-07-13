@@ -3,11 +3,20 @@ import { Languages, Book, Volume2, X } from 'lucide-react';
 import { translateText, explainWord } from '../../services/gemini';
 import './SelectionMenu.css';
 
-export default function SelectionMenu({ onReadAloud }) {
+export default function SelectionMenu({ onReadAloud, customSelection, onClearSelection }) {
   const [selection, setSelection] = useState({ text: '', x: 0, y: 0 });
   const [activePanel, setActivePanel] = useState(null);
   const [panelResult, setPanelResult] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (customSelection) {
+      setSelection(customSelection);
+      setActivePanel(null);
+    } else {
+      setSelection({ text: '', x: 0, y: 0 });
+    }
+  }, [customSelection]);
 
   useEffect(() => {
     const handleSelection = (e) => {
@@ -28,6 +37,7 @@ export default function SelectionMenu({ onReadAloud }) {
           if (!e.target.closest('.selection-menu-wrapper')) {
             setSelection({ text: '', x: 0, y: 0 });
             setActivePanel(null);
+            if (onClearSelection) onClearSelection();
           }
         }
       }, 100);
@@ -39,7 +49,7 @@ export default function SelectionMenu({ onReadAloud }) {
       document.removeEventListener('mouseup', handleSelection);
       document.removeEventListener('touchend', handleSelection);
     };
-  }, []);
+  }, [onClearSelection]);
 
   const handleTranslate = async () => {
     setActivePanel('translate');
@@ -60,7 +70,10 @@ export default function SelectionMenu({ onReadAloud }) {
     setIsLoading(true);
     setPanelResult('');
     try {
-      const result = await explainWord(selection.text, "A user selected this word.");
+      const isSentence = selection.text.trim().split(/\s+/).length > 2;
+      const result = isSentence 
+        ? await explainWord(selection.text, "A user selected this paragraph or sentence to be explained/simplified.")
+        : await explainWord(selection.text, "A user selected this word.");
       setPanelResult(result);
     } catch (err) {
       setPanelResult('Erro: ' + err.message);
