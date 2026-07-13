@@ -291,6 +291,15 @@ export default function TextToSpeech({ textToRead }) {
       return;
     }
 
+    // Stop any previous audio playback from any engine to prevent overlaps/screeches
+    window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    kokoroControllerRef.current?.stop();
+    kokoroControllerRef.current = null;
+
     setCurrentParaIndex(index);
     const rawText = paragraphs[index];
     
@@ -433,8 +442,45 @@ export default function TextToSpeech({ textToRead }) {
   };
 
   const handleGeminiToggle = (checked) => {
+    handleStop();
     setUseGeminiTTS(checked);
     settingsDB.setItem('use_gemini_tts', checked);
+    if (checked) {
+      setUseElevenLabs(false);
+      setUseKokoro(false);
+      settingsDB.setItem('use_elevenlabs', false);
+      settingsDB.setItem('use_kokoro', false);
+    }
+  };
+
+  const handleElevenLabsToggle = (checked) => {
+    handleStop();
+    setUseElevenLabs(checked);
+    settingsDB.setItem('use_elevenlabs', checked);
+    if (checked) {
+      setUseGeminiTTS(false);
+      setUseKokoro(false);
+      settingsDB.setItem('use_gemini_tts', false);
+      settingsDB.setItem('use_kokoro', false);
+    }
+  };
+
+  const handleKokoroToggle = (checked) => {
+    handleStop();
+    setUseKokoro(checked);
+    settingsDB.setItem('use_kokoro', checked);
+    if (checked) {
+      setUseGeminiTTS(false);
+      setUseElevenLabs(false);
+      settingsDB.setItem('use_gemini_tts', false);
+      settingsDB.setItem('use_elevenlabs', false);
+
+      setKokoroStatus('loading');
+      initKokoro(msg => {
+        if (msg === 'ready') setKokoroStatus('ready');
+        else setKokoroProgress(msg);
+      }).then(() => setKokoroStatus('ready')).catch(() => setKokoroStatus('error'));
+    }
   };
 
   const handleChunkSizeChange = (val) => {
@@ -517,12 +563,7 @@ export default function TextToSpeech({ textToRead }) {
                   <Mic size={14} /> Voz Natural (ElevenLabs)
                 </span>
                 <label className="switch">
-                  <input type="checkbox" checked={useElevenLabs} onChange={e => {
-                    const v = e.target.checked;
-                    setUseElevenLabs(v);
-                    if (v) setUseKokoro(false);
-                    settingsDB.setItem('use_elevenlabs', v);
-                  }} />
+                  <input type="checkbox" checked={useElevenLabs} onChange={e => handleElevenLabsToggle(e.target.checked)} />
                   <span className="slider round"></span>
                 </label>
               </div>
@@ -542,18 +583,7 @@ export default function TextToSpeech({ textToRead }) {
                   <Cpu size={14} /> Voz Neural Local (Kokoro)
                 </span>
                 <label className="switch">
-                  <input type="checkbox" checked={useKokoro} onChange={e => {
-                    const v = e.target.checked;
-                    setUseKokoro(v);
-                    settingsDB.setItem('use_kokoro', v);
-                    if (v) {
-                      setKokoroStatus('loading');
-                      initKokoro(msg => {
-                        if (msg === 'ready') setKokoroStatus('ready');
-                        else setKokoroProgress(msg);
-                      }).then(() => setKokoroStatus('ready')).catch(() => setKokoroStatus('error'));
-                    }
-                  }} />
+                  <input type="checkbox" checked={useKokoro} onChange={e => handleKokoroToggle(e.target.checked)} />
                   <span className="slider round"></span>
                 </label>
               </div>
