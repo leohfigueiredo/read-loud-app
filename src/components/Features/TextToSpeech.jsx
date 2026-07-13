@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Square, Settings2, Sparkles, Mic, Cpu } from 'lucide-react';
+import { Play, Pause, Square, Settings2, Sparkles, Mic, Cpu, Volume2, ChevronRight } from 'lucide-react';
 import { generateGeminiAudio } from '../../services/gemini';
 import { generateElevenLabsAudio, ELEVENLABS_VOICES } from '../../services/elevenlabs';
 import { generateKokoroAudio, playKokoroAudio, initKokoro, getKokoroStatus, KOKORO_VOICES } from '../../services/kokoro';
@@ -30,6 +30,7 @@ export default function TextToSpeech({ textToRead }) {
   const [kokoroVoice, setKokoroVoice] = useState('bf_emma');
   const [kokoroStatus, setKokoroStatus] = useState('idle'); // idle|loading|ready|error
   const [kokoroProgress, setKokoroProgress] = useState('');
+  const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Paragraph Queue States
   const [paragraphs, setParagraphs] = useState([]);
@@ -489,8 +490,35 @@ export default function TextToSpeech({ textToRead }) {
   };
 
 
+  if (isCollapsed) {
+    return (
+      <div className="tts-container tts-container--collapsed animate-fade-in">
+        {/* Audio element is permanently rendered to avoid ref binding race conditions */}
+        <audio ref={audioRef} src={geminiAudioUrl || undefined} />
+
+        <button 
+          className="tts-collapsed-bubble" 
+          onClick={() => setIsCollapsed(false)}
+          title="Abrir Controles de Voz"
+        >
+          {isGeminiLoading ? (
+            <span className="tts-spinner" style={{ borderTopColor: 'white' }} />
+          ) : isPlaying ? (
+            <span className="tts-wave-animation">
+              <span className="bar"></span>
+              <span className="bar"></span>
+              <span className="bar"></span>
+            </span>
+          ) : (
+            <Volume2 size={20} style={{ color: 'white' }} />
+          )}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="tts-container">
+    <div className="tts-container animate-fade-in">
       {/* Audio element is permanently rendered to avoid ref binding race conditions */}
       <audio ref={audioRef} src={geminiAudioUrl || undefined} />
 
@@ -532,6 +560,15 @@ export default function TextToSpeech({ textToRead }) {
           title="Configurações de voz"
         >
           <Settings2 size={22} />
+        </button>
+
+        {/* COLLAPSE BUTTON */}
+        <button
+          className="tts-btn"
+          onClick={() => { setIsCollapsed(true); setShowSettings(false); }}
+          title="Minimizar Leitor"
+        >
+          <ChevronRight size={22} />
         </button>
       </div>
 

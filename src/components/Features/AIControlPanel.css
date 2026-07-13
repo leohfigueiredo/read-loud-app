@@ -3,8 +3,8 @@
   position: fixed;
   bottom: 2rem;
   right: 2rem;
-  width: 380px;
-  max-height: 500px;
+  width: 310px;
+  max-height: 420px;
   display: flex;
   flex-direction: column;
   z-index: 1000;
@@ -72,7 +72,7 @@
 .ai-chat-container {
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: 300px;
 }
 
 .chat-messages {
@@ -184,7 +184,7 @@
 .ai-text-content {
   font-size: 0.95rem;
   line-height: 1.6;
-  max-height: 250px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
