@@ -74,7 +74,7 @@
   gap: 0.75rem;
 }
 
-.icon-btn {
+.library-modern .icon-btn {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: white;
@@ -88,7 +88,7 @@
   transition: all 0.2s;
 }
 
-.icon-btn:hover {
+.library-modern .icon-btn:hover {
   background: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-2px);
