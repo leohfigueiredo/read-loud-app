@@ -34,22 +34,35 @@ export async function generateElevenLabsAudio(text, voiceId = 'EXAVITQu4vr4xnSDx
     return audioCache.get(cacheKey);
   }
 
-  const response = await fetch('/api/elevenlabs', {
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'xi-api-key': elApiKey,
+      'Accept': 'audio/mpeg',
     },
     body: JSON.stringify({
-      action: 'tts',
-      apiKey: elApiKey,
       text,
-      voiceId,
+      model_id: 'eleven_multilingual_v2',
+      voice_settings: {
+        stability: 0.4,
+        similarity_boost: 0.8,
+        style: 0.3,
+        use_speaker_boost: true,
+      },
     }),
   });
 
   if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Erro ElevenLabs: ${response.status}`);
+    const errText = await response.text();
+    let errMessage = `Erro ElevenLabs: ${response.status}`;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson.detail && errJson.detail.message) {
+        errMessage = errJson.detail.message;
+      }
+    } catch {}
+    throw new Error(errMessage);
   }
 
   const blob = await response.blob();
@@ -61,15 +74,11 @@ export async function generateElevenLabsAudio(text, voiceId = 'EXAVITQu4vr4xnSDx
 }
 
 export async function testElevenLabsConnection(apiKey) {
-  const response = await fetch('/api/elevenlabs', {
-    method: 'POST',
+  const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
+      'xi-api-key': apiKey,
     },
-    body: JSON.stringify({
-      action: 'test',
-      apiKey,
-    }),
   });
 
   if (response.status === 401) {
@@ -77,8 +86,15 @@ export async function testElevenLabsConnection(apiKey) {
   }
 
   if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Erro ${response.status} ao contactar ElevenLabs.`);
+    const errText = await response.text();
+    let errMessage = `Erro ElevenLabs: ${response.status}`;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson.detail && errJson.detail.message) {
+        errMessage = errJson.detail.message;
+      }
+    } catch {}
+    throw new Error(errMessage);
   }
 
   const data = await response.json();

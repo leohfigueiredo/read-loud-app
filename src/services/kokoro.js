@@ -63,12 +63,9 @@ export async function initKokoro(onProgress) {
     // Configure local WASM paths to load from public directory
     env.wasmPaths = '/';
 
-    const isMobile = typeof navigator !== 'undefined' && 
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // Force WASM on mobile devices to prevent WebGPU precision (FP16) driver bugs 
-    // that output NaNs (causing screeching/beeping audio) on mobile GPUs.
-    const device = (typeof navigator !== 'undefined' && navigator.gpu && !isMobile) ? 'webgpu' : 'wasm';
+    // Force WASM on all devices to prevent WebGPU driver issues, precision (FP16) bugs, and loading freezes
+    const device = 'wasm';
     onProgress?.(`Usando backend: ${device.toUpperCase()}`);
 
     kokoroInstance = await KokoroTTS.from_pretrained(
