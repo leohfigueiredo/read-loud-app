@@ -88,6 +88,32 @@ export default function EpubReader({
           newRendition.display();
         }
 
+        // Generate locations in the background for detailed percentage estimation
+        newBook.ready.then(() => {
+          return newBook.locations.generate(1024);
+        }).then(() => {
+          const currentLoc = newRendition.currentLocation();
+          if (currentLoc && newBook.locations.length() > 0) {
+            const percent = Math.round(newBook.locations.percentageFromCfi(currentLoc.start.cfi) * 100);
+            setProgress(percent);
+            
+            // Trigger a progress update to parent now that locations are available
+            if (onProgressUpdateRef.current) {
+              onProgressUpdateRef.current({
+                currentPage: Math.round(newBook.locations.percentageFromCfi(currentLoc.start.cfi) * newBook.locations.length()) || 1,
+                totalPages: newBook.locations.length() || 100,
+                pageInChapter: currentLoc.start.displayed?.page || 1,
+                totalInChapter: currentLoc.start.displayed?.total || 1,
+                chapterTitle: currentLoc.start.label || 'Sem Título',
+                currentLocationCfi: currentLoc.start.cfi,
+                progressPercent: percent
+              });
+            }
+          }
+        }).catch(err => {
+          console.warn("Background locations generation failed/cancelled:", err);
+        });
+
         // Extract text + inject OpenDyslexic stylesheet into iframe
         newRendition.on('rendered', (section, view) => {
           const iframeDoc = view?.document;
@@ -133,36 +159,45 @@ export default function EpubReader({
         });
 
         newRendition.on('relocated', (location) => {
-          if (newBook.locations.length() > 0) {
-            const percent = Math.round(newBook.locations.percentageFromCfi(location.start.cfi) * 100);
-            setProgress(percent);
-            
-            // Get chapter page progress
-            const displayedPage = location.start.displayed?.page || 1;
-            const displayedTotal = location.start.displayed?.total || 1;
-            const chapterTitle = location.start.label || 'Sem Título';
+          const cfi = location.start.cfi;
+          const displayedPage = location.start.displayed?.page || 1;
+          const displayedTotal = location.start.displayed?.total || 1;
+          const chapterTitle = location.start.label || 'Sem Título';
 
-            if (onProgressUpdateRef.current) {
-              onProgressUpdateRef.current({
-                currentPage: Math.round(newBook.locations.percentageFromCfi(location.start.cfi) * newBook.locations.length()) || 1,
-                totalPages: newBook.locations.length() || 100,
-                pageInChapter: displayedPage,
-                totalInChapter: displayedTotal,
-                chapterTitle,
-                currentLocationCfi: location.start.cfi,
+          let percent = 0;
+          if (newBook.locations.length() > 0) {
+            percent = Math.round(newBook.locations.percentageFromCfi(cfi) * 100);
+            setProgress(percent);
+          }
+
+          const curPage = newBook.locations.length() > 0 
+            ? Math.round(newBook.locations.percentageFromCfi(cfi) * newBook.locations.length()) || 1
+            : displayedPage;
+          
+          const totPages = newBook.locations.length() > 0
+            ? newBook.locations.length() || 100
+            : displayedTotal;
+
+          if (onProgressUpdateRef.current) {
+            onProgressUpdateRef.current({
+              currentPage: curPage,
+              totalPages: totPages,
+              pageInChapter: displayedPage,
+              totalInChapter: displayedTotal,
+              chapterTitle,
+              currentLocationCfi: cfi,
+              progressPercent: percent
+            });
+          }
+
+          if (bookId) {
+            setTimeout(() => {
+              saveBook(file, bookId, {
+                ...metadataRef.current,
+                progressLocation: cfi,
                 progressPercent: percent
               });
-            }
-
-            if (bookId) {
-              setTimeout(() => {
-                saveBook(file, bookId, {
-                  ...metadataRef.current,
-                  progressLocation: location.start.cfi,
-                  progressPercent: percent
-                });
-              }, 500);
-            }
+            }, 500);
           }
         });
 
