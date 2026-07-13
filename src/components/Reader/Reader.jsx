@@ -501,7 +501,7 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
               onClearSelection={() => setCustomSelection(null)}
               onSaveNote={handleAddNote}
             />
-           <TextToSpeech textToRead={ttsText || currentPageText} />
+            <TextToSpeech textToRead={ttsText || currentPageText} hudActive={hudActive} />
          </>
       )}
 

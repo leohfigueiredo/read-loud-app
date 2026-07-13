@@ -7,7 +7,7 @@ import { detectLanguage, pickBestVoice } from '../../services/languageDetector';
 import { settingsDB } from '../../services/storage';
 import './TextToSpeech.css';
 
-export default function TextToSpeech({ textToRead }) {
+export default function TextToSpeech({ textToRead, hudActive }) {
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [detectedLang, setDetectedLang] = useState('en');
@@ -492,7 +492,7 @@ export default function TextToSpeech({ textToRead }) {
 
   if (isCollapsed) {
     return (
-      <div className="tts-container tts-container--collapsed animate-fade-in">
+      <div className={`tts-container tts-container--collapsed animate-fade-in ${hudActive ? 'tts-hud-active' : ''}`}>
         {/* Audio element is permanently rendered to avoid ref binding race conditions */}
         <audio ref={audioRef} src={geminiAudioUrl || undefined} />
 
@@ -518,7 +518,7 @@ export default function TextToSpeech({ textToRead }) {
   }
 
   return (
-    <div className="tts-container animate-fade-in">
+    <div className={`tts-container animate-fade-in ${hudActive ? 'tts-hud-active' : ''}`}>
       {/* Audio element is permanently rendered to avoid ref binding race conditions */}
       <audio ref={audioRef} src={geminiAudioUrl || undefined} />
 
