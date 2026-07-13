@@ -64,11 +64,26 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
       }
 
       let coverDataUrl = null;
+      let bookTitle = file.name.replace(/\.[^/.]+$/, ''); // fallback title
+      let bookAuthor = 'Autor Desconhecido';
       const arrayBuffer = await file.arrayBuffer();
 
       if (isPdf) {
         try {
           const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+          
+          try {
+            const metaInfo = await pdfDoc.getMetadata();
+            if (metaInfo?.info?.Title) {
+              bookTitle = metaInfo.info.Title.trim();
+            }
+            if (metaInfo?.info?.Author) {
+              bookAuthor = metaInfo.info.Author.trim();
+            }
+          } catch (metaErr) {
+            console.warn('Failed to extract PDF metadata:', metaErr);
+          }
+
           const page = await pdfDoc.getPage(1);
           const viewport = page.getViewport({ scale: 0.5 });
           const canvas = document.createElement('canvas');
@@ -83,6 +98,19 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
       } else if (isEpub) {
         try {
           const book = ePub(arrayBuffer);
+          
+          try {
+            await book.ready;
+            if (book.package?.metadata?.title) {
+              bookTitle = book.package.metadata.title.trim();
+            }
+            if (book.package?.metadata?.creator) {
+              bookAuthor = book.package.metadata.creator.trim();
+            }
+          } catch (metaErr) {
+            console.warn('Failed to extract EPUB metadata:', metaErr);
+          }
+
           const coverUrl = await book.coverUrl();
           if (coverUrl) {
             const response = await fetch(coverUrl);
@@ -98,9 +126,21 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
         }
       }
 
+      // Clean filename fallback or meta Title if it contains file-system patterns
+      if (bookTitle) {
+        bookTitle = bookTitle
+          .replace(/_Worldfreebooks\.com/gi, '')
+          .replace(/_Worldfreebook/gi, '')
+          .replace(/_/g, ' ')
+          .replace(/-/g, ' - ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       const id = Date.now().toString();
       const metadata = {
-        title: file.name.replace(/\.[^/.]+$/, ''),
+        title: bookTitle || file.name.replace(/\.[^/.]+$/, ''),
+        author: bookAuthor,
         type: isPdf ? 'pdf' : 'epub',
         size: file.size,
         cover: coverDataUrl

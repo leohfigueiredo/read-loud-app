@@ -9,6 +9,8 @@ import TextToSpeech from '../Features/TextToSpeech';
 import SelectionMenu from '../Features/SelectionMenu';
 import SettingsModal from '../Features/SettingsModal';
 import AIControlPanel from '../Features/AIControlPanel';
+import ePub from 'epubjs';
+import * as pdfjsLib from 'pdfjs-dist';
 import './Reader.css';
 
 export default function Reader({ theme, bionic, setTheme, setBionic }) {
@@ -196,7 +198,68 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
           navigate('/');
           return;
         }
-        setBookData(data);
+
+        let meta = { ...data.metadata };
+        let file = data.file;
+        let needsUpdate = false;
+
+        // Clean filename formatting or load real metadata if title is still the filename
+        if (meta.title && (meta.title.includes('_') || meta.title.toLowerCase().includes('worldfreebooks') || !meta.author || meta.author === 'Autor Desconhecido')) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            if (meta.type === 'epub') {
+              const book = ePub(arrayBuffer);
+              await book.ready;
+              if (book.package?.metadata?.title) {
+                meta.title = book.package.metadata.title.trim();
+                needsUpdate = true;
+              }
+              if (book.package?.metadata?.creator) {
+                meta.author = book.package.metadata.creator.trim();
+                needsUpdate = true;
+              }
+            } else if (meta.type === 'pdf') {
+              const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+              try {
+                const info = await pdfDoc.getMetadata();
+                if (info?.info?.Title) {
+                  meta.title = info.info.Title.trim();
+                  needsUpdate = true;
+                }
+                if (info?.info?.Author) {
+                  meta.author = info.info.Author.trim();
+                  needsUpdate = true;
+                }
+              } catch (pdfMetaErr) {
+                console.warn("Failed to extract PDF metadata:", pdfMetaErr);
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to dynamically extract metadata:", e);
+          }
+        }
+
+        // Apply clean formatting fallback to title if needed
+        if (meta.title) {
+          const originalTitle = meta.title;
+          meta.title = meta.title
+            .replace(/_Worldfreebooks\.com/gi, '')
+            .replace(/_Worldfreebook/gi, '')
+            .replace(/_/g, ' ')
+            .replace(/-/g, ' - ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (meta.title !== originalTitle) {
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate) {
+          const { metaDB } = await import('../../services/storage');
+          await metaDB.setItem(id, meta);
+        }
+
+        setBookData({ file, metadata: meta });
       } catch (err) {
         console.error("Error loading book:", err);
       } finally {

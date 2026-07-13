@@ -39,6 +39,22 @@ export default function EpubReader({
     );
   };
 
+  const onTextExtractRef = useRef(onTextExtract);
+  const onSelectionRef = useRef(onSelection);
+  const onTocExtractRef = useRef(onTocExtract);
+  const onProgressUpdateRef = useRef(onProgressUpdate);
+  const onPageClickRef = useRef(onPageClick);
+  const metadataRef = useRef(metadata);
+
+  useEffect(() => {
+    onTextExtractRef.current = onTextExtract;
+    onSelectionRef.current = onSelection;
+    onTocExtractRef.current = onTocExtract;
+    onProgressUpdateRef.current = onProgressUpdate;
+    onPageClickRef.current = onPageClick;
+    metadataRef.current = metadata;
+  }, [onTextExtract, onSelection, onTocExtract, onProgressUpdate, onPageClick, metadata]);
+
   useEffect(() => {
     let newBook;
     async function loadEpub() {
@@ -57,15 +73,17 @@ export default function EpubReader({
         
         // Extract and report Table of Contents (TOC)
         const rawToc = newBook.navigation.toc || [];
-        if (onTocExtract) {
-          onTocExtract(rawToc.map(item => ({
+        if (onTocExtractRef.current) {
+          onTocExtractRef.current(rawToc.map(item => ({
             label: item.label.trim(),
             location: item.href
           })));
         }
 
-        if (metadata.progressLocation) {
-          newRendition.display(metadata.progressLocation);
+        // Get starting location from the initial metadata
+        const initialLoc = metadataRef.current?.progressLocation;
+        if (initialLoc) {
+          newRendition.display(initialLoc);
         } else {
           newRendition.display();
         }
@@ -81,18 +99,18 @@ export default function EpubReader({
             iframeDoc.head.appendChild(link);
           }
 
-          if (onTextExtract) {
+          if (onTextExtractRef.current) {
             try {
               const text = view?.document?.body?.innerText
                 || view?.document?.body?.textContent
                 || '';
-              if (text.trim()) onTextExtract(text.trim());
+              if (text.trim()) onTextExtractRef.current(text.trim());
             } catch {
               // fallback: try via iframe
               try {
                 const iframe = viewerRef.current?.querySelector('iframe');
                 const t = iframe?.contentDocument?.body?.innerText || '';
-                if (t.trim()) onTextExtract(t.trim());
+                if (t.trim()) onTextExtractRef.current(t.trim());
               } catch {}
             }
           }
@@ -124,8 +142,8 @@ export default function EpubReader({
             const displayedTotal = location.start.displayed?.total || 1;
             const chapterTitle = location.start.label || 'Sem Título';
 
-            if (onProgressUpdate) {
-              onProgressUpdate({
+            if (onProgressUpdateRef.current) {
+              onProgressUpdateRef.current({
                 currentPage: Math.round(newBook.locations.percentageFromCfi(location.start.cfi) * newBook.locations.length()) || 1,
                 totalPages: newBook.locations.length() || 100,
                 pageInChapter: displayedPage,
@@ -139,7 +157,7 @@ export default function EpubReader({
             if (bookId) {
               setTimeout(() => {
                 saveBook(file, bookId, {
-                  ...metadata,
+                  ...metadataRef.current,
                   progressLocation: location.start.cfi,
                   progressPercent: percent
                 });
@@ -151,14 +169,14 @@ export default function EpubReader({
         newRendition.on('selected', (cfiRange, contents) => {
           const sel = contents.window.getSelection();
           const text = sel.toString().trim();
-          if (text && onSelection) {
+          if (text && onSelectionRef.current) {
             try {
               const range = sel.getRangeAt(0);
               const rect = range.getBoundingClientRect();
               const iframe = viewerRef.current?.querySelector('iframe');
               const iframeRect = iframe ? iframe.getBoundingClientRect() : { left: 0, top: 0 };
 
-              onSelection({
+              onSelectionRef.current({
                 text,
                 x: iframeRect.left + rect.left + (rect.width / 2),
                 y: iframeRect.top + rect.top + window.scrollY - 10
@@ -176,8 +194,8 @@ export default function EpubReader({
               const sel = iframe?.contentWindow?.getSelection();
               const text = sel?.toString().trim() || '';
               if (!text) {
-                if (onSelection) onSelection(null);
-                if (onPageClick) onPageClick();
+                if (onSelectionRef.current) onSelectionRef.current(null);
+                if (onPageClickRef.current) onPageClickRef.current();
               }
             } catch {}
           }, 100);
@@ -191,7 +209,7 @@ export default function EpubReader({
 
     if (file) loadEpub();
     return () => { if (newBook) newBook.destroy(); };
-  }, [file, metadata, bookId, onTextExtract, onSelection, onTocExtract, onProgressUpdate, onPageClick]);
+  }, [file, bookId]);
 
   // Inject styles to style EPUB text inside iframe dynamically
   useEffect(() => {

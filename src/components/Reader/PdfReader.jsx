@@ -28,6 +28,16 @@ export default function PdfReader({
   useEffect(() => { pageRef.current = pageNumber; }, [pageNumber]);
   useEffect(() => { numPagesRef.current = numPages; }, [numPages]);
 
+  const onTextExtractRef = useRef(onTextExtract);
+  const onTocExtractRef = useRef(onTocExtract);
+  const onProgressUpdateRef = useRef(onProgressUpdate);
+
+  useEffect(() => {
+    onTextExtractRef.current = onTextExtract;
+    onTocExtractRef.current = onTocExtract;
+    onProgressUpdateRef.current = onProgressUpdate;
+  }, [onTextExtract, onTocExtract, onProgressUpdate]);
+
   const progressPercent = numPages ? Math.round((pageNumber / numPages) * 100) : 0;
 
   // Real page-flip animation using CSS 3D transforms
@@ -106,18 +116,18 @@ export default function PdfReader({
             });
           }
         }
-        if (onTocExtract) onTocExtract(formattedToc);
+        if (onTocExtractRef.current) onTocExtractRef.current(formattedToc);
       } catch (err) {
         console.error('Error loading PDF', err);
       }
     }
     if (file) loadPdf();
-  }, [file, onTocExtract]);
+  }, [file]);
 
   // Report progress metrics to parent
   useEffect(() => {
-    if (numPages && onProgressUpdate) {
-      onProgressUpdate({
+    if (numPages && onProgressUpdateRef.current) {
+      onProgressUpdateRef.current({
         currentPage: pageNumber,
         totalPages: numPages,
         pageInChapter: pageNumber,
@@ -127,7 +137,7 @@ export default function PdfReader({
         progressPercent
       });
     }
-  }, [pageNumber, numPages, progressPercent, onProgressUpdate]);
+  }, [pageNumber, numPages, progressPercent]);
 
   // Render page + trigger animation AFTER render
   useEffect(() => {
@@ -148,16 +158,16 @@ export default function PdfReader({
           pendingDir.current = null;
         }
 
-        if (onTextExtract) {
+        if (onTextExtractRef.current) {
           const textContent = await page.getTextContent();
-          onTextExtract(textContent.items.map(i => i.str).join(' '));
+          onTextExtractRef.current(textContent.items.map(i => i.str).join(' '));
         }
       } catch (err) {
         console.error('Error rendering page', err);
       }
     }
     renderPage();
-  }, [pdfDoc, pageNumber, onTextExtract]);
+  }, [pdfDoc, pageNumber]);
 
   // Touch swipe
   const onTouchStart = (e) => { touchStartRef.current = e.targetTouches[0].clientX; };
