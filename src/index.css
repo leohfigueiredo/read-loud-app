@@ -10,6 +10,12 @@
   --accent-hover: #4f46e5;
   --border-color: #e2e8f0;
   
+  /* Legacy/Missing Variables Mapping */
+  --text-color: #0f172a;
+  --input-bg: #f1f5f9;
+  --panel-bg: #ffffff;
+  --hover-bg: #e2e8f0;
+  
   /* Fonts */
   --font-ui: 'Inter', sans-serif;
   --font-heading: 'Outfit', sans-serif;
@@ -37,6 +43,13 @@
   --border-color: #334155;
   --accent-color: #818cf8;
   --accent-hover: #6366f1;
+  
+  /* Legacy/Missing Variables Mapping */
+  --text-color: #f8fafc;
+  --input-bg: #334155;
+  --panel-bg: #1e293b;
+  --hover-bg: #475569;
+  
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }
@@ -50,6 +63,13 @@
   --border-color: #fde68a;
   --accent-color: #d97706;
   --accent-hover: #b45309;
+  
+  /* Legacy/Missing Variables Mapping */
+  --text-color: #451a03;
+  --input-bg: #fde68a;
+  --panel-bg: #fffbeb;
+  --hover-bg: #fcd34d;
+  
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }

@@ -30,6 +30,7 @@ function App() {
   // Apply preferences
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    settingsDB.setItem('theme', theme);
     if (bionic) {
       document.body.classList.add('bionic-mode-enabled');
     } else {
