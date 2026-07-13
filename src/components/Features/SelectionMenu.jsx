@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Languages, Book, Volume2, X } from 'lucide-react';
+import { Languages, Book, Volume2, X, Bookmark } from 'lucide-react';
 import { translateText, explainWord } from '../../services/gemini';
 import './SelectionMenu.css';
 
-export default function SelectionMenu({ onReadAloud, customSelection, onClearSelection }) {
+export default function SelectionMenu({ onReadAloud, customSelection, onClearSelection, onSaveNote }) {
   const [selection, setSelection] = useState({ text: '', x: 0, y: 0 });
   const [activePanel, setActivePanel] = useState(null);
   const [panelResult, setPanelResult] = useState('');
@@ -99,6 +99,9 @@ export default function SelectionMenu({ onReadAloud, customSelection, onClearSel
           </button>
           <button className="icon-btn tooltip" onClick={() => onReadAloud(selection.text)} title="Ler em Voz Alta">
             <Volume2 size={18} />
+          </button>
+          <button className="icon-btn tooltip" onClick={() => { if (onSaveNote) onSaveNote(selection.text); }} title="Destacar e Criar Nota">
+            <Bookmark size={18} />
           </button>
         </div>
       ) : (

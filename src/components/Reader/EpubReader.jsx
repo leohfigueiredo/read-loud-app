@@ -2,7 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
 import { saveBook } from '../../services/storage';
 
-export default function EpubReader({ file, metadata, onTextExtract, bookId, theme, onSelection }) {
+export default function EpubReader({ 
+  file, 
+  metadata, 
+  onTextExtract, 
+  bookId, 
+  theme, 
+  onSelection,
+  fontSize,
+  fontFamily,
+  lineHeight,
+  paragraphSpacing,
+  letterSpacing,
+  goToLocation,
+  onTocExtract,
+  onProgressUpdate,
+  onPageClick
+}) {
   const viewerRef = useRef(null);
   const wrapperRef = useRef(null);
   const touchStartRef = useRef(null);
@@ -38,10 +54,14 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
         });
 
         await newBook.ready;
-        try {
-          await newBook.locations.generate(1600);
-        } catch (e) {
-          console.warn('Locations could not be generated', e);
+        
+        // Extract and report Table of Contents (TOC)
+        const rawToc = newBook.navigation.toc || [];
+        if (onTocExtract) {
+          onTocExtract(rawToc.map(item => ({
+            label: item.label.trim(),
+            location: item.href
+          })));
         }
 
         if (metadata.progressLocation) {
@@ -50,8 +70,17 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
           newRendition.display();
         }
 
-        // Extract text using the view object provided by epubjs
+        // Extract text + inject OpenDyslexic stylesheet into iframe
         newRendition.on('rendered', (section, view) => {
+          const iframeDoc = view?.document;
+          if (iframeDoc && !iframeDoc.getElementById('opendyslexic-iframe-css')) {
+            const link = iframeDoc.createElement('link');
+            link.id = 'opendyslexic-iframe-css';
+            link.rel = 'stylesheet';
+            link.href = 'https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic.css';
+            iframeDoc.head.appendChild(link);
+          }
+
           if (onTextExtract) {
             try {
               const text = view?.document?.body?.innerText
@@ -89,6 +118,24 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
           if (newBook.locations.length() > 0) {
             const percent = Math.round(newBook.locations.percentageFromCfi(location.start.cfi) * 100);
             setProgress(percent);
+            
+            // Get chapter page progress
+            const displayedPage = location.start.displayed?.page || 1;
+            const displayedTotal = location.start.displayed?.total || 1;
+            const chapterTitle = location.start.label || 'Sem Título';
+
+            if (onProgressUpdate) {
+              onProgressUpdate({
+                currentPage: Math.round(newBook.locations.percentageFromCfi(location.start.cfi) * newBook.locations.length()) || 1,
+                totalPages: newBook.locations.length() || 100,
+                pageInChapter: displayedPage,
+                totalInChapter: displayedTotal,
+                chapterTitle,
+                currentLocationCfi: location.start.cfi,
+                progressPercent: percent
+              });
+            }
+
             if (bookId) {
               setTimeout(() => {
                 saveBook(file, bookId, {
@@ -110,7 +157,7 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
               const rect = range.getBoundingClientRect();
               const iframe = viewerRef.current?.querySelector('iframe');
               const iframeRect = iframe ? iframe.getBoundingClientRect() : { left: 0, top: 0 };
-              
+
               onSelection({
                 text,
                 x: iframeRect.left + rect.left + (rect.width / 2),
@@ -128,8 +175,9 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
               const iframe = viewerRef.current?.querySelector('iframe');
               const sel = iframe?.contentWindow?.getSelection();
               const text = sel?.toString().trim() || '';
-              if (!text && onSelection) {
-                onSelection(null);
+              if (!text) {
+                if (onSelection) onSelection(null);
+                if (onPageClick) onPageClick();
               }
             } catch {}
           }, 100);
@@ -143,38 +191,61 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
 
     if (file) loadEpub();
     return () => { if (newBook) newBook.destroy(); };
-  }, [file, metadata, bookId, onTextExtract, onSelection]);
+  }, [file, metadata, bookId, onTextExtract, onSelection, onTocExtract, onProgressUpdate, onPageClick]);
 
   // Inject styles to style EPUB text inside iframe dynamically
   useEffect(() => {
     if (!rendition) return;
 
+    const fontVal = fontFamily === 'OpenDyslexic' ? 'OpenDyslexic, sans-serif' : fontFamily;
+
     const themeStyles = {
       light: {
         body: {
           background: '#ffffff !important',
-          color: '#0f172a !important'
+          color: '#0f172a !important',
+          'font-family': `${fontVal} !important`,
+          'font-size': `${fontSize}px !important`,
+          'line-height': `${lineHeight} !important`,
+          'letter-spacing': `${letterSpacing} !important`
         },
         'p, span, li, h1, h2, h3, h4, h5, h6, a': {
           color: '#0f172a !important'
+        },
+        'p': {
+          'margin-bottom': `${paragraphSpacing}rem !important`
         }
       },
       dark: {
         body: {
           background: '#0f172a !important',
-          color: '#f8fafc !important'
+          color: '#f8fafc !important',
+          'font-family': `${fontVal} !important`,
+          'font-size': `${fontSize}px !important`,
+          'line-height': `${lineHeight} !important`,
+          'letter-spacing': `${letterSpacing} !important`
         },
         'p, span, li, h1, h2, h3, h4, h5, h6, a': {
           color: '#f8fafc !important'
+        },
+        'p': {
+          'margin-bottom': `${paragraphSpacing}rem !important`
         }
       },
       night: {
         body: {
           background: '#fffbeb !important',
-          color: '#451a03 !important'
+          color: '#451a03 !important',
+          'font-family': `${fontVal} !important`,
+          'font-size': `${fontSize}px !important`,
+          'line-height': `${lineHeight} !important`,
+          'letter-spacing': `${letterSpacing} !important`
         },
         'p, span, li, h1, h2, h3, h4, h5, h6, a': {
           color: '#451a03 !important'
+        },
+        'p': {
+          'margin-bottom': `${paragraphSpacing}rem !important`
         }
       }
     };
@@ -196,7 +267,21 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
 
     // Select the current theme
     rendition.themes.select(theme || 'light');
-  }, [theme, rendition]);
+  }, [theme, rendition, fontSize, fontFamily, lineHeight, paragraphSpacing, letterSpacing]);
+
+  // Handle external navigation (TOC/Bookmarks)
+  useEffect(() => {
+    if (goToLocation && rendition) {
+      if (typeof goToLocation === 'string' && (goToLocation.startsWith('epubcfi') || goToLocation.includes('#') || goToLocation.includes('.'))) {
+        rendition.display(goToLocation);
+      } else if (typeof goToLocation === 'string') {
+        rendition.display(goToLocation);
+      } else if (book && book.locations && typeof goToLocation === 'number') {
+        const cfi = book.locations.cfiFromPercentage(goToLocation / book.locations.length());
+        rendition.display(cfi);
+      }
+    }
+  }, [goToLocation, rendition, book]);
 
   const next = () => {
     if (rendition) rendition.next().then(() => animateIn('next'));
@@ -218,8 +303,8 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
 
   return (
     <div className="epub-reader-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
-      {/* Progress bar */}
-      <div style={{ width: '100%', padding: '0.5rem 1rem', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: '1rem', zIndex: 10 }}>
+      {/* HUD Mode hides this local progress bar since the main footer takes over */}
+      <div style={{ display: 'none', width: '100%', padding: '0.5rem 1rem', background: 'var(--bg-secondary)', alignItems: 'center', gap: '1rem', zIndex: 10 }}>
         <input
           type="range"
           min="0"
@@ -238,8 +323,8 @@ export default function EpubReader({ file, metadata, onTextExtract, bookId, them
         <div ref={viewerRef} style={{ width: '100%', height: '100%' }}></div>
       </div>
 
-      {/* Buttons */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', padding: '0.75rem', background: 'var(--bg-secondary)' }}>
+      {/* Left/Right click hotspots or manual footer buttons when HUD is inactive */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', padding: '0.75rem', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-color)' }}>
         <button className="btn-secondary" onClick={prev}>← Anterior</button>
         <button className="btn-secondary" onClick={next}>Próxima →</button>
       </div>

@@ -2,10 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { saveBook } from '../../services/storage';
 
-export default function FlowingPdfReader({ file, metadata, onTextExtract, bookId }) {
+export default function FlowingPdfReader({ 
+  file, 
+  metadata, 
+  onTextExtract, 
+  bookId,
+  fontSize,
+  fontFamily,
+  lineHeight,
+  paragraphSpacing,
+  letterSpacing,
+  goToLocation,
+  onProgressUpdate
+}) {
   const [textParagraphs, setTextParagraphs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState(metadata.progressPercent || 0);
+  const [, setProgress] = useState(metadata.progressPercent || 0);
   const contentRef = useRef(null);
 
   useEffect(() => {
@@ -59,32 +71,49 @@ export default function FlowingPdfReader({ file, metadata, onTextExtract, bookId
     if (file) extractText();
   }, [file, onTextExtract]);
 
-  const handleProgressChange = (e) => {
-    const percent = parseInt(e.target.value);
-    setProgress(percent);
-    if (contentRef.current) {
-      const { scrollHeight, clientHeight } = contentRef.current;
-      contentRef.current.scrollTop = (percent / 100) * (scrollHeight - clientHeight);
+  const handleScroll = () => {
+    if (!contentRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
+    const percent = (scrollTop / (scrollHeight - clientHeight)) * 100;
+    const percentRounded = Math.round(percent) || 0;
+    setProgress(percentRounded);
+
+    // Calculate estimated pages based on clientHeight (1 viewport = 1 page)
+    const totalEstPages = Math.ceil(scrollHeight / clientHeight) || 1;
+    const currentEstPage = Math.floor(scrollTop / clientHeight) + 1;
+
+    if (onProgressUpdate) {
+      onProgressUpdate({
+        currentPage: currentEstPage,
+        totalPages: totalEstPages,
+        pageInChapter: currentEstPage,
+        totalInChapter: totalEstPages,
+        chapterTitle: 'Texto Fluido',
+        currentLocationCfi: scrollTop,
+        progressPercent: percentRounded
+      });
+    }
+     
+    if (bookId) {
+      setTimeout(() => {
+         saveBook(file, bookId, {
+            ...metadata,
+            progressPercent: percentRounded,
+            progressLocation: scrollTop
+         });
+      }, 500);
     }
   };
 
-  const handleScroll = (_e) => {
-     if (!contentRef.current) return;
-     const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
-     const percent = (scrollTop / (scrollHeight - clientHeight)) * 100;
-     const percentRounded = Math.round(percent) || 0;
-     setProgress(percentRounded);
-     
-     if (bookId) {
-        setTimeout(() => {
-           saveBook(file, bookId, {
-              ...metadata,
-              progressPercent: percentRounded,
-              progressLocation: scrollTop
-           });
-        }, 500);
-     }
-  };
+  // Handle external navigation (like bookmarks)
+  useEffect(() => {
+    if (goToLocation !== null && goToLocation !== undefined && contentRef.current) {
+      const scrollPos = parseInt(goToLocation);
+      if (!isNaN(scrollPos)) {
+        contentRef.current.scrollTop = scrollPos;
+      }
+    }
+  }, [goToLocation]);
 
   useEffect(() => {
      if (!loading && contentRef.current && metadata.progressLocation) {
@@ -101,29 +130,27 @@ export default function FlowingPdfReader({ file, metadata, onTextExtract, bookId
      );
   }
 
+  const fontVal = fontFamily === 'OpenDyslexic' ? 'OpenDyslexic, sans-serif' : fontFamily;
+
   return (
     <div className="flowing-pdf-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
-      <div className="reader-progress-bar" style={{ width: '100%', padding: '0.5rem 1rem', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: '1rem', zIndex: 10 }}>
-         <input 
-           type="range" 
-           min="0" 
-           max="100" 
-           value={progress} 
-           onChange={handleProgressChange}
-           style={{ flex: 1, accentColor: 'var(--accent-color)', cursor: 'pointer' }}
-           disabled={loading}
-           title="Arraste para rolar a página"
-         />
-         <span style={{ fontSize: '0.85rem', fontWeight: 'bold', minWidth: '60px', textAlign: 'right' }}>{progress}%</span>
-      </div>
-      
       <div 
         ref={contentRef}
         onScroll={handleScroll}
-        style={{ flex: 1, padding: '2rem 10%', overflowY: 'auto', lineHeight: '1.8', fontSize: '1.2rem', textAlign: 'justify', WebkitOverflowScrolling: 'touch' }}
+        style={{ 
+          flex: 1, 
+          padding: '2rem 10%', 
+          overflowY: 'auto', 
+          lineHeight: lineHeight, 
+          fontSize: `${fontSize}px`, 
+          fontFamily: fontVal,
+          letterSpacing: letterSpacing,
+          textAlign: 'justify', 
+          WebkitOverflowScrolling: 'touch' 
+        }}
       >
          {textParagraphs.map((p, i) => (
-            <p key={i} style={{ marginBottom: '1.5rem' }}>{p}</p>
+            <p key={i} style={{ marginBottom: `${paragraphSpacing}rem` }}>{p}</p>
          ))}
       </div>
     </div>

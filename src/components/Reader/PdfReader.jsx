@@ -5,7 +5,16 @@ import { saveBook } from '../../services/storage';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-export default function PdfReader({ file, metadata, onTextExtract, bookId, theme }) {
+export default function PdfReader({ 
+  file, 
+  metadata, 
+  onTextExtract, 
+  bookId, 
+  theme,
+  goToLocation,
+  onTocExtract,
+  onProgressUpdate
+}) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(parseInt(metadata.progressLocation) || 1);
   const canvasRef = useRef(null);
@@ -13,7 +22,7 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
   const [pdfDoc, setPdfDoc] = useState(null);
   const pendingDir = useRef(null);
   const touchStartRef = useRef(null);
-  // Keep a ref that's always current for use in touch handlers
+
   const pageRef = useRef(pageNumber);
   const numPagesRef = useRef(numPages);
   useEffect(() => { pageRef.current = pageNumber; }, [pageNumber]);
@@ -46,6 +55,15 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
     setPageNumber(clamped);
   };
 
+  useEffect(() => {
+    if (goToLocation && pdfDoc) {
+      const pageNum = parseInt(goToLocation);
+      if (!isNaN(pageNum)) {
+        goTo(pageNum, pageNum > pageRef.current ? 'next' : 'prev');
+      }
+    }
+  }, [goToLocation, pdfDoc]);
+
   // Save progress
   useEffect(() => {
     if (numPages && bookId) {
@@ -60,7 +78,7 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
     }
   }, [pageNumber, numPages, progressPercent, bookId, file, metadata]);
 
-  // Load PDF
+  // Load PDF + Extract outline (TOC)
   useEffect(() => {
     async function loadPdf() {
       try {
@@ -68,12 +86,48 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
         const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         setPdfDoc(doc);
         setNumPages(doc.numPages);
+
+        // Fetch outline (table of contents)
+        const outline = await doc.getOutline();
+        const formattedToc = [];
+        if (outline) {
+          for (const item of outline) {
+            let pageNum = null;
+            try {
+              if (typeof item.dest === 'string') {
+                pageNum = await doc.getPageIndex(item.dest) + 1;
+              } else if (Array.isArray(item.dest)) {
+                pageNum = await doc.getPageIndex(item.dest[0]) + 1;
+              }
+            } catch {}
+            formattedToc.push({
+              label: item.title,
+              location: pageNum
+            });
+          }
+        }
+        if (onTocExtract) onTocExtract(formattedToc);
       } catch (err) {
         console.error('Error loading PDF', err);
       }
     }
     if (file) loadPdf();
-  }, [file]);
+  }, [file, onTocExtract]);
+
+  // Report progress metrics to parent
+  useEffect(() => {
+    if (numPages && onProgressUpdate) {
+      onProgressUpdate({
+        currentPage: pageNumber,
+        totalPages: numPages,
+        pageInChapter: pageNumber,
+        totalInChapter: numPages,
+        chapterTitle: `Página ${pageNumber}`,
+        currentLocationCfi: pageNumber,
+        progressPercent
+      });
+    }
+  }, [pageNumber, numPages, progressPercent, onProgressUpdate]);
 
   // Render page + trigger animation AFTER render
   useEffect(() => {
@@ -122,25 +176,6 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      {/* Progress bar */}
-      <div style={{ width: '100%', padding: '0.5rem 1rem', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <input
-          type="range"
-          min="1"
-          max={numPages || 1}
-          value={pageNumber}
-          onChange={(e) => {
-            const val = parseInt(e.target.value);
-            goTo(val, val > pageRef.current ? 'next' : 'prev');
-          }}
-          style={{ flex: 1, accentColor: 'var(--accent-color)', cursor: 'pointer' }}
-          disabled={!numPages}
-        />
-        <span style={{ fontSize: '0.85rem', fontWeight: 'bold', minWidth: '80px', textAlign: 'right' }}>
-          {pageNumber}/{numPages || '?'} · {progressPercent}%
-        </span>
-      </div>
-
       {/* Canvas with 3D perspective wrapper */}
       <div ref={wrapperRef} style={{ width: '100%', display: 'flex', justifyContent: 'center', transformStyle: 'preserve-3d' }}>
         <canvas 
@@ -155,7 +190,7 @@ export default function PdfReader({ file, metadata, onTextExtract, bookId, theme
         />
       </div>
 
-      {/* Navigation buttons */}
+      {/* Navigation buttons (shown at bottom) */}
       <div style={{ marginTop: '1rem', marginBottom: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
         <button
           className="btn-secondary"
