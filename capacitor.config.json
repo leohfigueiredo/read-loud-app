@@ -1,0 +1,8 @@
+{
+  "appId": "com.leohfigueiredo.readloud",
+  "appName": "Read Loud",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  }
+}

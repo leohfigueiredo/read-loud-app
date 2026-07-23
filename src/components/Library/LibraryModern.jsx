@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Trash2, Settings, Moon, Sun, Monitor, Search, Grid, List } from 'lucide-react';
-import { getAllBooksMetadata, saveBook, deleteBook } from '../../services/storage';
+import { Upload, Trash2, Settings, Moon, Sun, Monitor, Search, Grid, List, Palette, PenTool } from 'lucide-react';
+import { getAllBooksMetadata, saveBook, deleteBook, updateBookShelf } from '../../services/storage';
 import SettingsModal from '../Features/SettingsModal';
+import ThemeModal from '../Features/ThemeModal';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import ePub from 'epubjs';
@@ -10,10 +11,11 @@ import './LibraryModern.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
+export default function LibraryModern({ theme, setTheme, bionic, setBionic, uiTheme, setUiTheme, uiFont, setUiFont, radius, setRadius, uiColor, setUiColor }) {
   const [books, setBooks] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef(null);
@@ -32,9 +34,25 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
     }
   };
 
-  const filteredBooks = books.filter(book =>
-    book.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [activeShelf, setActiveShelf] = useState('Todas');
+  const shelves = ['Todas', 'Lendo', 'Estudo', 'Favoritos', 'Lidos'];
+
+  const filteredBooks = books.filter(book => {
+    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const bookShelf = book.shelf || 'Todas';
+    const matchesShelf = activeShelf === 'Todas' ? true : (bookShelf === activeShelf);
+    return matchesSearch && matchesShelf;
+  });
+
+  const handleShelfChange = async (e, id, newShelf) => {
+    e.stopPropagation();
+    try {
+      await updateBookShelf(id, newShelf);
+      await loadBooks();
+    } catch (err) {
+      console.error('Error updating shelf:', err);
+    }
+  };
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
@@ -173,25 +191,37 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
             <p>Premium E-book Reader</p>
           </div>
 
-          <div className="search-box">
-            <Search size={18} />
-            <input
-              type="text"
-              placeholder="Procure um livro..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
           <div className="header-actions">
-            <button className="icon-btn" onClick={cycleTheme} title="Alternar tema">
+            <div className="search-box">
+              <Search size={18} />
+              <input
+                type="text"
+                placeholder="Procure um livro..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <button className="icon-btn" onClick={cycleTheme} title="Alternar tema (Leitura)">
               {theme === 'light' ? <Sun size={20} /> : theme === 'dark' ? <Moon size={20} /> : <Monitor size={20} />}
+            </button>
+            <button className="icon-btn" onClick={() => setShowThemeModal(true)} title="Personalizar Tema e Layout">
+              <Palette size={20} />
             </button>
             <button className="icon-btn" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')} title="Mudar visualização">
               {viewMode === 'grid' ? <List size={20} /> : <Grid size={20} />}
             </button>
             <button className="icon-btn" onClick={() => setShowSettings(true)} title="Configurações">
               <Settings size={20} />
+            </button>
+            <button
+              className="btn-upload"
+              style={{ background: 'var(--panel-bg)', color: 'var(--text-color)', border: '1px solid var(--border-color)' }}
+              onClick={() => navigate('/notebook')}
+              title="Abrir Caderno de Anotações"
+            >
+              <PenTool size={18} />
+              Caderno
             </button>
             <input
               type="file"
@@ -211,6 +241,19 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
           </div>
         </div>
       </header>
+
+      {/* Shelves Tabs */}
+      <div className="shelves-container">
+        {shelves.map(shelf => (
+          <button 
+            key={shelf} 
+            className={`shelf-tab ${activeShelf === shelf ? 'active' : ''}`}
+            onClick={() => setActiveShelf(shelf)}
+          >
+            {shelf}
+          </button>
+        ))}
+      </div>
 
       {/* Main Content */}
       <main className="library-content">
@@ -254,9 +297,20 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
                   <div className="progress-bar">
                     <div className="progress-fill" style={{ width: `${book.progressPercent || 0}%` }} />
                   </div>
-                  <p className="progress-text">
-                    {book.progressPercent ? `${Math.round(book.progressPercent)}%` : 'Não iniciado'}
-                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                    <p className="progress-text" style={{ margin: 0 }}>
+                      {book.progressLocation !== undefined ? `${Math.round(book.progressPercent || 0)}%` : 'Não iniciado'}
+                    </p>
+                    <select 
+                      className="shelf-select" 
+                      value={book.shelf || 'Todas'} 
+                      onChange={(e) => handleShelfChange(e, book.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {shelves.filter(s => s !== 'Todas').map(s => <option key={s} value={s}>{s}</option>)}
+                      <option value="Todas">Sem estante</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             ))}
@@ -271,6 +325,20 @@ export default function LibraryModern({ theme, setTheme, bionic, setBionic }) {
           setTheme={setTheme}
           bionic={bionic}
           setBionic={setBionic}
+        />
+      )}
+      
+      {showThemeModal && (
+        <ThemeModal 
+          onClose={() => setShowThemeModal(false)}
+          currentUiTheme={uiTheme}
+          setUiTheme={setUiTheme}
+          currentRadius={radius}
+          setRadius={setRadius}
+          currentUiFont={uiFont}
+          setUiFont={setUiFont}
+          currentUiColor={uiColor}
+          setUiColor={setUiColor}
         />
       )}
     </div>

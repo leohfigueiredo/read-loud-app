@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { saveBook } from '../../services/storage';
+import { updateProgress } from '../../services/storage';
 
 export default function FlowingPdfReader({ 
   file, 
@@ -96,11 +96,7 @@ export default function FlowingPdfReader({
      
     if (bookId) {
       setTimeout(() => {
-         saveBook(file, bookId, {
-            ...metadata,
-            progressPercent: percentRounded,
-            progressLocation: scrollTop
-         });
+         updateProgress(bookId, scrollTop, percentRounded);
       }, 500);
     }
   };
@@ -132,11 +128,25 @@ export default function FlowingPdfReader({
 
   const fontVal = fontFamily === 'OpenDyslexic' ? 'OpenDyslexic, sans-serif' : fontFamily;
 
+  const handleContainerClick = (e) => {
+    const sel = window.getSelection()?.toString();
+    if (sel && sel.trim().length > 0) return;
+
+    const target = e.target.closest('p');
+    if (target) {
+      const text = target.innerText || target.textContent;
+      if (text && text.trim().length > 0) {
+        window.dispatchEvent(new CustomEvent('tts-paragraph-clicked', { detail: { text: text.trim() } }));
+      }
+    }
+  };
+
   return (
     <div className="flowing-pdf-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <div 
         ref={contentRef}
         onScroll={handleScroll}
+        onClick={handleContainerClick}
         style={{ 
           flex: 1, 
           padding: '2rem 10%', 

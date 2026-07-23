@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Square, Settings2, Sparkles, Mic, Cpu, Volume2, ChevronRight } from 'lucide-react';
 import { generateGeminiAudio } from '../../services/gemini';
 import { generateElevenLabsAudio, ELEVENLABS_VOICES } from '../../services/elevenlabs';
-import { generateKokoroAudio, playKokoroAudio, initKokoro, getKokoroStatus, KOKORO_VOICES } from '../../services/kokoro';
+import { generateQwenAudio } from '../../services/qwen_tts';
+import { generateKokoroServerAudio } from '../../services/kokoro_server';
 import { detectLanguage, pickBestVoice } from '../../services/languageDetector';
 import { settingsDB } from '../../services/storage';
 import './TextToSpeech.css';
 
-export default function TextToSpeech({ textToRead, hudActive }) {
+export default function TextToSpeech({ bookId, currentLocation, textToRead, hudActive }) {
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [detectedLang, setDetectedLang] = useState('en');
@@ -25,22 +26,51 @@ export default function TextToSpeech({ textToRead, hudActive }) {
   const [useElevenLabs, setUseElevenLabs] = useState(false);
   const [elVoice, setElVoice] = useState('EXAVITQu4vr4xnSDxMaL');
   const [hasElKey, setHasElKey] = useState(false);
-  // Kokoro (local neural TTS)
-  const [useKokoro, setUseKokoro] = useState(false);
-  const [kokoroVoice, setKokoroVoice] = useState('bf_emma');
-  const [kokoroStatus, setKokoroStatus] = useState('idle'); // idle|loading|ready|error
-  const [kokoroProgress, setKokoroProgress] = useState('');
+  // Kokoro Server
+  const [useKokoroServer, setUseKokoroServer] = useState(false);
+  const [kokoroServerVoice, setKokoroServerVoice] = useState('af_heart');
+  const [kokoroServerProgress, setKokoroServerProgress] = useState('');
+  const [kokoroServerUrl, setKokoroServerUrl] = useState('http://127.0.0.1:8880');
+
+  const kokoroServerVoicesList = [
+    { id: 'af_heart', name: '🇺🇸 Heart (Feminina - Recomendada)' },
+    { id: 'af_bella', name: '🇺🇸 Bella (Feminina)' },
+    { id: 'af_nicole', name: '🇺🇸 Nicole (Feminina)' },
+    { id: 'af_sarah', name: '🇺🇸 Sarah (Feminina)' },
+    { id: 'af_alloy', name: '🇺🇸 Alloy (Feminina)' },
+    { id: 'af_sky', name: '🇺🇸 Sky (Feminina)' },
+    { id: 'am_adam', name: '🇺🇸 Adam (Masculino)' },
+    { id: 'am_michael', name: '🇺🇸 Michael (Masculino)' },
+    { id: 'am_fenrir', name: '🇺🇸 Fenrir (Masculino)' },
+    { id: 'am_puck', name: '🇺🇸 Puck (Masculino - Expressivo)' },
+    { id: 'am_echo', name: '🇺🇸 Echo (Masculino)' },
+    { id: 'am_onyx', name: '🇺🇸 Onyx (Masculino)' },
+    { id: 'bf_alice', name: '🇬🇧 Alice (Feminina)' },
+    { id: 'bf_emma', name: '🇬🇧 Emma (Feminina)' },
+    { id: 'bf_isabella', name: '🇬🇧 Isabella (Feminina)' },
+    { id: 'bf_lily', name: '🇬🇧 Lily (Feminina)' },
+    { id: 'bm_daniel', name: '🇬🇧 Daniel (Masculino)' },
+    { id: 'bm_fable', name: '🇬🇧 Fable (Masculino)' },
+    { id: 'bm_george', name: '🇬🇧 George (Masculino)' },
+    { id: 'bm_lewis', name: '🇬🇧 Lewis (Masculino)' }
+  ];
+
   const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Paragraph Queue States
   const [paragraphs, setParagraphs] = useState([]);
   const [currentParaIndex, setCurrentParaIndex] = useState(0);
 
+  // Kokoro Launcher States
+  const [launcherStatus, setLauncherStatus] = useState('checking'); // 'checking', 'running', 'stopped', 'offline'
+  const [isLauncherActionPending, setIsLauncherActionPending] = useState(false);
+
   const audioRef = useRef(null);
   const currentParaIndexRef = useRef(0);
   const paragraphsRef = useRef([]);
   const kokoroControllerRef = useRef(null); // Web Audio API controller for Kokoro playback
   const playParagraphRef = useRef(null);
+  const prevDepsRef = useRef({ text: '', chunkSize: 0 });
 
   // Sync refs with state to prevent React closure stale references
   useEffect(() => {
@@ -77,7 +107,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     }
   };
 
-  const highlightInDocument = (doc, text) => {
+  const highlightInDocument = (doc, text, isIframe = false) => {
     const elements = doc.querySelectorAll('p, li, h1, h2, h3, h4, h5, span');
     const cleanText = text.trim().replace(/\s+/g, ' ');
     if (cleanText.length < 5) return; // avoid highlighting single letters/short words
@@ -97,7 +127,10 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     
     if (bestMatch) {
       bestMatch.classList.add('tts-highlight');
-      bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Only scroll into view if it's NOT an EPUB iframe to prevent columns/page shifting
+      if (!isIframe) {
+        bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   };
 
@@ -106,7 +139,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     if (!text || text.trim().length === 0) return;
 
     // Highlight in main document
-    highlightInDocument(document, text);
+    highlightInDocument(document, text, false);
 
     // Highlight in iframe if present
     const iframe = document.querySelector('iframe');
@@ -114,7 +147,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
       try {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (iframeDoc) {
-          highlightInDocument(iframeDoc, text);
+          highlightInDocument(iframeDoc, text, true);
         }
       } catch (e) {
         console.warn("Could not access iframe document for highlighting:", e);
@@ -161,15 +194,55 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     settingsDB.getItem('use_elevenlabs').then(val => {
       if (val !== null) setUseElevenLabs(val);
     });
-    settingsDB.getItem('use_kokoro').then(val => {
-      if (val !== null) setUseKokoro(!!val);
+    settingsDB.getItem('use_kokoro_server').then(val => {
+      if (val !== null) setUseKokoroServer(!!val);
     });
-    settingsDB.getItem('kokoro_voice').then(v => {
-      if (v) setKokoroVoice(v);
+    settingsDB.getItem('kokoro_server_voice').then(val => {
+      if (val) setKokoroServerVoice(val);
     });
-    // Reflect current Kokoro loading state
-    setKokoroStatus(getKokoroStatus());
+    settingsDB.getItem('kokoro_server_url').then(val => {
+      if (val) setKokoroServerUrl(val);
+    });
   }, [showSettings]);
+
+  // Launcher Functions
+  const fetchLauncherStatus = async () => {
+    try {
+      const res = await fetch('https://leocontrole.loca.lt/status', { method: 'GET', headers: { 'Bypass-Tunnel-Reminder': 'true' } });
+      if (!res.ok) throw new Error('Offline');
+      const data = await res.json();
+      setLauncherStatus(data.status);
+    } catch (e) {
+      setLauncherStatus('offline');
+    }
+  };
+
+  const handleLauncherAction = async (action) => {
+    setIsLauncherActionPending(true);
+    try {
+      const res = await fetch(`https://leocontrole.loca.lt/${action}`, { 
+        method: 'POST', 
+        headers: { 'Bypass-Tunnel-Reminder': 'true' } 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLauncherStatus(data.status);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLauncherActionPending(false);
+    }
+  };
+
+  // Poll launcher status when using Kokoro
+  useEffect(() => {
+    if (useKokoroServer) {
+      fetchLauncherStatus();
+      const interval = setInterval(fetchLauncherStatus, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [useKokoroServer]);
 
   // Auto-detect language and pick best voice when text or voices change
   useEffect(() => {
@@ -183,6 +256,12 @@ export default function TextToSpeech({ textToRead, hudActive }) {
   // Build paragraphs list on text change, splitting long paragraphs into sub-chunks
   useEffect(() => {
     if (textToRead) {
+      if (textToRead === prevDepsRef.current.text && chunkSize === prevDepsRef.current.chunkSize && paragraphs.length > 0) {
+        // Avoid resetting paragraph index if only currentLocation changed (e.g., page swipe)
+        return;
+      }
+      prevDepsRef.current = { text: textToRead, chunkSize };
+
       const validChunkSize = (Number.isInteger(chunkSize) && chunkSize > 0) ? chunkSize : 800;
       const rawParagraphs = textToRead
         .split('\n')
@@ -213,10 +292,74 @@ export default function TextToSpeech({ textToRead, hudActive }) {
       }
 
       setParagraphs(list);
-      setCurrentParaIndex(0);
+
+      // Load saved paragraph index from database if it matches the current location
+      if (bookId && currentLocation !== undefined) {
+        import('../../services/storage').then(({ metaDB }) => {
+          metaDB.getItem(bookId).then(meta => {
+            if (meta && String(meta.progressLocation) === String(currentLocation) && typeof meta.ttsParagraphIndex === 'number' && meta.ttsParagraphIndex < list.length) {
+              setCurrentParaIndex(meta.ttsParagraphIndex);
+            } else {
+              setCurrentParaIndex(0);
+            }
+          }).catch(() => {
+            setCurrentParaIndex(0);
+          });
+        });
+      } else {
+        setCurrentParaIndex(0);
+      }
+
       clearHighlights();
     }
-  }, [textToRead, chunkSize]);
+  }, [textToRead, chunkSize, bookId, currentLocation]);
+
+  // Save paragraph index to DB when it changes
+  useEffect(() => {
+    if (bookId && currentLocation !== undefined) {
+      import('../../services/storage').then(({ updateProgress, metaDB }) => {
+        metaDB.getItem(bookId).then(meta => {
+          if (meta) {
+            updateProgress(bookId, currentLocation, meta.progressPercent, currentParaIndex);
+          }
+        });
+      });
+    }
+  }, [currentParaIndex, bookId, currentLocation]);
+
+  // Handle paragraph selection click/tap from reader components
+  useEffect(() => {
+    const handleParagraphClicked = (e) => {
+      const clickedText = e.detail?.text;
+      if (!clickedText || paragraphs.length === 0) return;
+      
+      const cleanClicked = clickedText.replace(/\s+/g, ' ').trim();
+      let bestIndex = -1;
+      
+      for (let i = 0; i < paragraphs.length; i++) {
+        const cleanPara = paragraphs[i].replace(/\s+/g, ' ').trim();
+        if (cleanPara.includes(cleanClicked) || cleanClicked.includes(cleanPara)) {
+          bestIndex = i;
+          break;
+        }
+      }
+      
+      if (bestIndex !== -1) {
+        setCurrentParaIndex(bestIndex);
+        highlightText(paragraphs[bestIndex]);
+        
+        // If play parameter is true or it was already playing, trigger synthesis/playback
+        const shouldPlay = e.detail?.play === true || isPlaying;
+        if (shouldPlay) {
+          setIsPlaying(true);
+          playParagraphRef.current?.(bestIndex);
+        }
+      }
+    };
+
+    window.addEventListener('tts-paragraph-clicked', handleParagraphClicked);
+    return () => window.removeEventListener('tts-paragraph-clicked', handleParagraphClicked);
+  }, [paragraphs, isPlaying]);
 
   // Stop speech when page changes
   useEffect(() => {
@@ -348,42 +491,29 @@ export default function TextToSpeech({ textToRead, hudActive }) {
         setIsGeminiLoading(false);
         playBrowserTTS(text);
       }
-    } else if (useKokoro) {
+    } else if (useKokoroServer) {
       setIsGeminiLoading(true);
-      setKokoroStatus('loading');
+      setKokoroServerProgress('Gerando voz no Kokoro local...');
       try {
-        const audioData = await generateKokoroAudio(text, kokoroVoice, (msg) => {
-          if (msg === 'ready') { setKokoroStatus('ready'); }
-          else { setKokoroProgress(msg); }
+        const audioUrl = await generateKokoroServerAudio(text, (msg) => {
+          setKokoroServerProgress(msg);
         });
-        setKokoroStatus('ready');
+        setKokoroServerProgress('');
         setIsPlaying(true);
         setIsPaused(false);
         setIsGeminiLoading(false);
 
-        // Stop any previous Kokoro playback
-        kokoroControllerRef.current?.stop();
-
-        // Play directly via Web Audio API (no <audio> element, no blob URL)
-        kokoroControllerRef.current = playKokoroAudio(audioData, () => {
-          const nextIndex = currentParaIndexRef.current + 1;
-          if (nextIndex < paragraphsRef.current.length) {
-            playParagraph(nextIndex);
-          } else {
-            setIsPlaying(false);
-            setIsPaused(false);
-            clearHighlights();
-          }
-        });
+        // Play the returned blob URL
+        setGeminiAudioUrl(audioUrl);
 
         // Prefetch next paragraph
         const nextIndex = index + 1;
         if (nextIndex < paragraphsRef.current.length) {
-          generateKokoroAudio(paragraphsRef.current[nextIndex], kokoroVoice).catch(() => {});
+          generateKokoroServerAudio(paragraphsRef.current[nextIndex], () => {}).catch(() => {});
         }
       } catch (err) {
-        console.warn('Kokoro TTS falhou, usando voz do browser:', err.message);
-        setKokoroStatus('error');
+        console.warn('Kokoro Server falhou, usando voz do browser:', err.message);
+        setKokoroServerProgress(`Erro: ${err.message}`);
         setIsGeminiLoading(false);
         playBrowserTTS(text);
       }
@@ -398,9 +528,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     if (paragraphs.length === 0) return;
 
     if (isPaused) {
-      if (useKokoro && kokoroControllerRef.current) {
-        kokoroControllerRef.current.resume();
-      } else if ((useGeminiTTS || useElevenLabs) && audioRef.current) {
+      if ((useGeminiTTS || useElevenLabs || useKokoroServer) && audioRef.current) {
         audioRef.current.play().catch(e => console.error(e));
       } else {
         window.speechSynthesis.resume();
@@ -416,9 +544,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
 
   const handlePause = () => {
     window.speechSynthesis.pause();
-    if (useKokoro && kokoroControllerRef.current) {
-      kokoroControllerRef.current.pause();
-    } else if (audioRef.current) {
+    if (audioRef.current) {
       audioRef.current.pause();
     }
     setIsPaused(true);
@@ -427,10 +553,6 @@ export default function TextToSpeech({ textToRead, hudActive }) {
 
   const handleStop = () => {
     window.speechSynthesis.cancel();
-    if (useKokoro && kokoroControllerRef.current) {
-      kokoroControllerRef.current.stop();
-      kokoroControllerRef.current = null;
-    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -438,7 +560,7 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     setGeminiAudioUrl(null);
     setIsPlaying(false);
     setIsPaused(false);
-    setCurrentParaIndex(0);
+    // Keep currentParaIndex intact so we do not go back to the beginning!
     clearHighlights();
   };
 
@@ -448,9 +570,9 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     settingsDB.setItem('use_gemini_tts', checked);
     if (checked) {
       setUseElevenLabs(false);
-      setUseKokoro(false);
+      setUseKokoroServer(false);
       settingsDB.setItem('use_elevenlabs', false);
-      settingsDB.setItem('use_kokoro', false);
+      settingsDB.setItem('use_kokoro_server', false);
     }
   };
 
@@ -460,27 +582,25 @@ export default function TextToSpeech({ textToRead, hudActive }) {
     settingsDB.setItem('use_elevenlabs', checked);
     if (checked) {
       setUseGeminiTTS(false);
-      setUseKokoro(false);
+      setUseKokoroServer(false);
       settingsDB.setItem('use_gemini_tts', false);
-      settingsDB.setItem('use_kokoro', false);
+      settingsDB.setItem('use_kokoro_server', false);
     }
   };
 
-  const handleKokoroToggle = (checked) => {
+
+  const handleKokoroServerToggle = (checked) => {
     handleStop();
-    setUseKokoro(checked);
-    settingsDB.setItem('use_kokoro', checked);
+    setUseKokoroServer(checked);
+    settingsDB.setItem('use_kokoro_server', checked);
     if (checked) {
       setUseGeminiTTS(false);
       setUseElevenLabs(false);
       settingsDB.setItem('use_gemini_tts', false);
       settingsDB.setItem('use_elevenlabs', false);
-
-      setKokoroStatus('loading');
-      initKokoro(msg => {
-        if (msg === 'ready') setKokoroStatus('ready');
-        else setKokoroProgress(msg);
-      }).then(() => setKokoroStatus('ready')).catch(() => setKokoroStatus('error'));
+      setKokoroServerProgress('Pronto para Kokoro Server');
+    } else {
+      setKokoroServerProgress('');
     }
   };
 
@@ -612,26 +732,21 @@ export default function TextToSpeech({ textToRead, hudActive }) {
             </div>
           )}
 
-          {/* Kokoro toggle (local neural, only shown when others are off) */}
+          {/* Kokoro FastAPI Server toggle */}
           {!useGeminiTTS && !useElevenLabs && (
             <div className="tts-setting-row tts-setting-row--border">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: '#34d399' }}>
-                  <Cpu size={14} /> Voz Neural Local (Kokoro)
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: '#38bdf8' }}>
+                  <Cpu size={14} /> Voz Neural Local (Servidor Kokoro)
                 </span>
                 <label className="switch">
-                  <input type="checkbox" checked={useKokoro} onChange={e => handleKokoroToggle(e.target.checked)} />
+                  <input type="checkbox" checked={useKokoroServer} onChange={e => handleKokoroServerToggle(e.target.checked)} />
                   <span className="slider round"></span>
                 </label>
               </div>
-              {useKokoro && (
-                <p style={{ fontSize: '0.78rem', margin: 0, color:
-                    kokoroStatus === 'ready'   ? '#34d399' :
-                    kokoroStatus === 'error'   ? '#f87171' : '#fbbf24' }}>
-                  {kokoroStatus === 'ready'   ? '✅ Modelo carregado e pronto!' :
-                   kokoroStatus === 'error'   ? '❌ Erro ao carregar o modelo' :
-                   kokoroStatus === 'loading' ? `⏳ ${kokoroProgress || 'A carregar modelo...'} (pode demorar ~1 min)` :
-                   '💡 Será descarregado ao iniciar (≈1 min, depois fica em cache)'}
+              {useKokoroServer && (
+                <p style={{ fontSize: '0.78rem', margin: 0, color: kokoroServerProgress.includes('Erro') ? '#f87171' : '#fbbf24' }}>
+                  {kokoroServerProgress || '💡 Gerado via servidor local Kokoro-FastAPI.'}
                 </p>
               )}
             </div>
@@ -650,7 +765,9 @@ export default function TextToSpeech({ textToRead, hudActive }) {
                 <select value={chunkSize} onChange={e => handleChunkSizeChange(parseInt(e.target.value))} className="select-input">
                   <option value={400}>400 letras (Ultra Económico ~40s áudio 💰)</option>
                   <option value={800}>800 letras (Padrão Recomendado ~1.5m ⚖️)</option>
-                  <option value={1500}>1500 letras (Completo ~3m áudio 🎬)</option>
+                  <option value={1500}>1500 letras (Longa Duração ~3m 🎬)</option>
+                  <option value={3000}>3000 letras (Ultra Longo 🚀)</option>
+                  <option value={5000}>5000 letras (Máximo 🔥)</option>
                 </select>
                 <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
                   Trechos menores consomem menos créditos da sua chave API.
@@ -674,20 +791,60 @@ export default function TextToSpeech({ textToRead, hudActive }) {
                   <option value={400}>400 letras 💰</option>
                   <option value={800}>800 letras ⚖️ (Recomendado)</option>
                   <option value={1500}>1500 letras 🎬</option>
+                  <option value={3000}>3000 letras 🚀 (PC Forte)</option>
+                  <option value={5000}>5000 letras 🔥 (Máximo)</option>
                 </select>
               </div>
             </>
-          ) : useKokoro ? (
+          ) : useKokoroServer ? (
             <>
               <div className="tts-setting-row" style={{ marginBottom: '0.5rem' }}>
-                <label>Voz Neural (Kokoro):</label>
-                <select value={kokoroVoice} onChange={e => { setKokoroVoice(e.target.value); settingsDB.setItem('kokoro_voice', e.target.value); }} className="select-input">
-                  {KOKORO_VOICES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                <label>Voz Neural Kokoro:</label>
+                <select value={kokoroServerVoice} onChange={e => { setKokoroServerVoice(e.target.value); settingsDB.setItem('kokoro_server_voice', e.target.value); }} className="select-input">
+                  {kokoroServerVoicesList.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>
-              <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
-                💾 Modelo descarregado uma vez e guardado em cache. 100% gratuito, sem API key!
-              </p>
+              <div className="tts-setting-row">
+                <label>Tamanho do Trecho (Mais rápido vs Menos interrupções):</label>
+                <select value={chunkSize} onChange={e => handleChunkSizeChange(parseInt(e.target.value))} className="select-input">
+                  <option value={400}>400 letras 🚀 (Rápido)</option>
+                  <option value={800}>800 letras ⚖️ (Equilibrado)</option>
+                  <option value={1500}>1500 letras 🎬 (Longo)</option>
+                  <option value={3000}>3000 letras 🧠 (PC Forte)</option>
+                  <option value={5000}>5000 letras 🔥 (Máximo)</option>
+                </select>
+              </div>
+              <div className="tts-setting-row" style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>Controle do Servidor (Ubuntu)</p>
+                {launcherStatus === 'offline' ? (
+                  <p style={{ fontSize: '0.8rem', color: '#ff6b6b', margin: 0 }}>❌ Computador Geekom está offline ou Servidor de Controle parado.</p>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ 
+                      width: '10px', height: '10px', borderRadius: '50%', 
+                      backgroundColor: launcherStatus === 'running' ? '#4cd137' : '#fbc531',
+                      boxShadow: `0 0 8px ${launcherStatus === 'running' ? '#4cd137' : '#fbc531'}`
+                    }} />
+                    <span style={{ fontSize: '0.85rem' }}>
+                      Status: <strong>{launcherStatus === 'running' ? 'Rodando' : 'Parado'}</strong>
+                    </span>
+                    
+                    <button 
+                      className={`btn-${launcherStatus === 'running' ? 'danger' : 'primary'}`}
+                      style={{ marginLeft: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                      onClick={() => handleLauncherAction(launcherStatus === 'running' ? 'stop' : 'start')}
+                      disabled={isLauncherActionPending}
+                    >
+                      {isLauncherActionPending ? 'Aguarde...' : (launcherStatus === 'running' ? '⏹ Desligar' : '▶️ Ligar Kokoro')}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="tts-setting-row">
+                <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
+                  🔌 Requer servidor local do Kokoro rodando em **{kokoroServerUrl}**. Totalmente gratuito, offline e super rápido!
+                </p>
+              </div>
             </>
           ) : (
             <>

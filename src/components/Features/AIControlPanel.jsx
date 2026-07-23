@@ -29,7 +29,8 @@ export default function AIControlPanel({ _bookData, currentPageText, onClose }) 
       setMode('summary');
     } catch (error) {
       console.error('Summary generation failed:', error);
-      setAiResponse("Erro ao gerar resumo. Verifique sua chave de API.");
+      setAiResponse(error.message || "Erro ao gerar resumo. Verifique sua chave de API e conexão.");
+      setMode('summary');
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,8 @@ export default function AIControlPanel({ _bookData, currentPageText, onClose }) 
       setMode('explain');
     } catch (error) {
       console.error('Explanation generation failed:', error);
-      setAiResponse("Erro ao explicar.");
+      setAiResponse(error.message || "Erro ao explicar.");
+      setMode('explain');
     } finally {
       setLoading(false);
     }
@@ -62,7 +64,7 @@ export default function AIControlPanel({ _bookData, currentPageText, onClose }) 
       setChatHistory(prev => [...prev, { role: 'ai', content: simulatedResponse }]);
     } catch (error) {
       console.error('Chat error:', error);
-      setChatHistory(prev => [...prev, { role: 'ai', content: "Erro ao processar pergunta." }]);
+      setChatHistory(prev => [...prev, { role: 'ai', content: error.message || "Erro ao processar pergunta. Verifique sua chave de API." }]);
     } finally {
       setLoading(false);
     }

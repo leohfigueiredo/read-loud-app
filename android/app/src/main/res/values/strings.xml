@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Read Loud</string>
+    <string name="title_activity_main">Read Loud</string>
+    <string name="package_name">com.leohfigueiredo.readloud</string>
+    <string name="custom_url_scheme">com.leohfigueiredo.readloud</string>
+</resources>

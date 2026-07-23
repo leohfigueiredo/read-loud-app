@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { saveBook } from '../../services/storage';
+import { updateProgress } from '../../services/storage';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -78,15 +78,11 @@ export default function PdfReader({
   useEffect(() => {
     if (numPages && bookId) {
       const timer = setTimeout(() => {
-        saveBook(file, bookId, {
-          ...metadata,
-          progressLocation: pageNumber,
-          progressPercent
-        });
+        updateProgress(bookId, pageNumber, progressPercent);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [pageNumber, numPages, progressPercent, bookId, file, metadata]);
+  }, [pageNumber, numPages, progressPercent, bookId]);
 
   // Load PDF + Extract outline (TOC)
   useEffect(() => {

@@ -24,6 +24,20 @@ export const usageDB = localforage.createInstance({
   storeName: 'api_usage'
 });
 
+// Store notebook drawings (canvas data URL)
+export const notebookDB = localforage.createInstance({
+  name: 'ReadLoudApp',
+  storeName: 'notebook'
+});
+
+export async function saveNotebookData(dataUrl) {
+  await notebookDB.setItem('canvas_data', dataUrl);
+}
+
+export async function getNotebookData() {
+  return await notebookDB.getItem('canvas_data');
+}
+
 // Gemini pricing constants (USD per 1M characters, approximate)
 export const PRICING = {
   ttsPerChar:  0.50  / 1_000_000, // Gemini 2.5 Flash audio output
@@ -50,18 +64,35 @@ export async function clearUsage() {
 }
 
 export async function saveBook(file, id, metadata) {
-  await booksDB.setItem(id, file);
+  let fileData = file;
+  if (file instanceof Blob) {
+    fileData = await file.arrayBuffer();
+  }
+  await booksDB.setItem(id, fileData);
   await metaDB.setItem(id, { 
     ...metadata, 
     id, 
     progress: 0, 
-    addedAt: Date.now() 
+    addedAt: Date.now(),
+    shelf: metadata.shelf || 'Todas'
   });
 }
 
+export async function updateBookShelf(id, shelf) {
+  const meta = await metaDB.getItem(id);
+  if (meta) {
+    meta.shelf = shelf;
+    await metaDB.setItem(id, meta);
+  }
+}
+
 export async function getBook(id) {
-  const file = await booksDB.getItem(id);
+  let file = await booksDB.getItem(id);
   const metadata = await metaDB.getItem(id);
+  if (file && file instanceof ArrayBuffer) {
+    const mimeType = metadata.type === 'pdf' ? 'application/pdf' : 'application/epub+zip';
+    file = new Blob([file], { type: mimeType });
+  }
   return { file, metadata };
 }
 
@@ -73,11 +104,18 @@ export async function getAllBooksMetadata() {
   return books.sort((a, b) => b.addedAt - a.addedAt);
 }
 
-export async function updateProgress(id, progressLocation, percent) {
+export async function updateProgress(id, progressLocation, percent, ttsParagraphIndex = undefined) {
   const meta = await metaDB.getItem(id);
   if (meta) {
+    if (String(meta.progressLocation) !== String(progressLocation)) {
+      meta.ttsParagraphIndex = ttsParagraphIndex !== undefined ? ttsParagraphIndex : 0;
+    } else if (ttsParagraphIndex !== undefined) {
+      meta.ttsParagraphIndex = ttsParagraphIndex;
+    }
     meta.progressLocation = progressLocation; // e.g. epubcfi or page number
-    meta.progressPercent = percent;
+    if (percent !== undefined && percent !== null) {
+      meta.progressPercent = percent;
+    }
     meta.lastReadAt = Date.now();
     await metaDB.setItem(id, meta);
   }

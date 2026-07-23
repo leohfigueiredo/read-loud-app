@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+*.apk
+*.onnx
+android/app/src/main/assets/kokoro/

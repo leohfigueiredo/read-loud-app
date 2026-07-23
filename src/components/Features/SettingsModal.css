@@ -13,7 +13,7 @@
   width: 90%;
   max-width: 500px;
   background: var(--bg-secondary);
-  border-radius: 16px;
+  border-radius: var(--radius-shape);
   display: flex;
   flex-direction: column;
   max-height: 90vh;
@@ -58,7 +58,7 @@
 
 .settings-row select, .api-input {
   padding: 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-shape);
   border: 1px solid var(--border-color);
   background: var(--bg-color);
   color: var(--text-primary);

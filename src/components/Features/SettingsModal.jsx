@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, Key, Zap, Type, BookOpen, BarChart2, Trash2, Mic } from 'lucide-react';
+import { X, Key, Zap, Type, BookOpen, BarChart2, Trash2, Mic, Cpu } from 'lucide-react';
 import { settingsDB, getAllUsage, clearUsage, PRICING } from '../../services/storage';
 import { initGemini as initGeminiCore, testGeminiConnection } from '../../services/gemini';
 import { initGemini as initGeminiAdvanced } from '../../services/tts-advanced';
 import { initElevenLabs, testElevenLabsConnection } from '../../services/elevenlabs';
+import { testComfyUIConnection } from '../../services/qwen_tts';
+import { testKokoroServerConnection } from '../../services/kokoro_server';
 import './SettingsModal.css';
 
 export default function SettingsModal({ onClose, theme, setTheme, bionic, setBionic }) {
@@ -15,6 +17,10 @@ export default function SettingsModal({ onClose, theme, setTheme, bionic, setBio
   const [elKey, setElKey] = useState('');
   const [elTestStatus, setElTestStatus] = useState('');
   const [elTesting, setElTesting] = useState(false);
+  // Kokoro Server
+  const [kokoroServerUrl, setKokoroServerUrl] = useState('http://127.0.0.1:8880');
+  const [kokoroServerTestStatus, setKokoroServerTestStatus] = useState('');
+  const [kokoroServerTesting, setKokoroServerTesting] = useState(false);
 
   const loadUsage = () => getAllUsage().then(setUsageData);
 
@@ -28,6 +34,9 @@ export default function SettingsModal({ onClose, theme, setTheme, bionic, setBio
     settingsDB.getItem('elevenlabs_api_key').then(key => {
       if (key) setElKey(key);
     });
+    settingsDB.getItem('kokoro_server_url').then(url => {
+      if (url) setKokoroServerUrl(url);
+    });
     loadUsage();
   }, []);
 
@@ -40,6 +49,7 @@ export default function SettingsModal({ onClose, theme, setTheme, bionic, setBio
       settingsDB.setItem('elevenlabs_api_key', elKey);
       initElevenLabs(elKey);
     }
+    settingsDB.setItem('kokoro_server_url', kokoroServerUrl);
     settingsDB.setItem('theme', theme);
     settingsDB.setItem('bionic', bionic);
     onClose();
@@ -172,6 +182,41 @@ export default function SettingsModal({ onClose, theme, setTheme, bionic, setBio
               <p className="setting-desc">
                 Crie uma conta gratuita em <strong>elevenlabs.io</strong> (10.000 chars/mês grátis).
                 Ative nas configurações de voz do leitor com o toggle <strong>&ldquo;Vozes IA&rdquo;</strong> desligado — o ElevenLabs fica disponível como 3ª opção.
+              </p>
+            </div>
+          </div>
+
+          {/* Kokoro FastAPI Server section */}
+          <div className="settings-section">
+            <h3><Cpu size={18} /> Kokoro FastAPI Server</h3>
+            <div className="settings-row">
+              <label>Endereço do Servidor Kokoro-FastAPI:</label>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Ex: http://127.0.0.1:8880"
+                  value={kokoroServerUrl}
+                  onChange={e => setKokoroServerUrl(e.target.value)}
+                  className="api-input"
+                  style={{ flex: 1 }}
+                />
+                <button className="btn-secondary" disabled={kokoroServerTesting} style={{ padding: '0.5rem 1rem' }}
+                  onClick={async () => {
+                    if (!kokoroServerUrl) { setKokoroServerTestStatus('Digite o endereço primeiro.'); return; }
+                    setKokoroServerTesting(true); setKokoroServerTestStatus('Testando...');
+                    try {
+                      const msg = await testKokoroServerConnection(kokoroServerUrl);
+                      settingsDB.setItem('kokoro_server_url', kokoroServerUrl);
+                      setKokoroServerTestStatus(msg + ' (salvo!)');
+                    } catch(e) { setKokoroServerTestStatus('Erro: ' + e.message); }
+                    finally { setKokoroServerTesting(false); }
+                  }}>
+                  {kokoroServerTesting ? '...' : 'Testar'}
+                </button>
+              </div>
+              {kokoroServerTestStatus && <p style={{ fontSize: '0.85rem', color: kokoroServerTestStatus.includes('Erro') ? 'var(--accent-color)' : 'green', marginTop: '0.5rem' }}>{kokoroServerTestStatus}</p>}
+              <p className="setting-desc">
+                Defina o endereço IP e porta do seu container Docker rodando `remsky/kokoro-fastapi`. O padrão é `http://127.0.0.1:8880`.
               </p>
             </div>
           </div>

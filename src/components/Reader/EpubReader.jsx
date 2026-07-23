@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ePub from 'epubjs';
-import { saveBook } from '../../services/storage';
+import { updateProgress } from '../../services/storage';
 
 export default function EpubReader({ 
   file, 
@@ -17,11 +17,14 @@ export default function EpubReader({
   goToLocation,
   onTocExtract,
   onProgressUpdate,
-  onPageClick
+  onPageClick,
+  customSelection
 }) {
   const viewerRef = useRef(null);
   const wrapperRef = useRef(null);
   const touchStartRef = useRef(null);
+  const activeHighlightRangeRef = useRef(null);
+  const justSelectedRef = useRef(false);
   const [rendition, setRendition] = useState(null);
   const [book, setBook] = useState(null);
   const [progress, setProgress] = useState(metadata.progressPercent || 0);
@@ -125,6 +128,112 @@ export default function EpubReader({
             iframeDoc.head.appendChild(link);
           }
 
+          if (iframeDoc) {
+            iframeDoc.addEventListener('click', (e) => {
+              const sel = iframeDoc.getSelection()?.toString();
+              if (sel && sel.trim().length > 0) return;
+              
+              const target = e.target.closest('p, li, h1, h2, h3, h4, h5');
+              if (target) {
+                const text = target.innerText || target.textContent;
+                if (text && text.trim().length > 0) {
+                  window.dispatchEvent(new CustomEvent('tts-paragraph-clicked', { detail: { text: text.trim() } }));
+                }
+              }
+            });
+
+            // Robust text selection handling for mobile WebView and browsers
+            const handleSelectionChange = () => {
+              try {
+                const sel = iframeDoc.getSelection();
+                const text = sel?.toString().trim() || '';
+                
+                if (text && text.length > 0) {
+                  if (sel.rangeCount === 0) return;
+                  const range = sel.getRangeAt(0);
+                  const rect = range.getBoundingClientRect();
+                  const iframe = viewerRef.current?.querySelector('iframe');
+                  const iframeRect = iframe ? iframe.getBoundingClientRect() : { left: 0, top: 0 };
+                  
+                  // Convert DOM range to EpubJS CFI range
+                  let cfiRange = null;
+                  try {
+                    cfiRange = section.cfiFromRange(range);
+                  } catch (err) {
+                    console.warn("Failed to get cfiRange from range:", err);
+                  }
+
+                  // Remove previous highlight if any
+                  if (activeHighlightRangeRef.current) {
+                    try {
+                      newRendition.annotations.remove(activeHighlightRangeRef.current, "highlight");
+                    } catch (err) {}
+                  }
+
+                  // Add highlight if cfiRange is available
+                  if (cfiRange) {
+                    try {
+                      newRendition.annotations.add("highlight", cfiRange, {}, null, "custom-highlight");
+                      activeHighlightRangeRef.current = cfiRange;
+                    } catch (err) {
+                      console.warn("Failed to add highlight annotation:", err);
+                    }
+                  }
+
+                  // Send selection info to parent
+                  if (onSelectionRef.current) {
+                    onSelectionRef.current({
+                      text,
+                      cfiRange,
+                      x: iframeRect.left + rect.left + (rect.width / 2),
+                      y: iframeRect.top + rect.top + window.scrollY - 10
+                    });
+                  }
+                } else {
+                  // If selection is empty, check if we just selected (prevent race condition on clearing)
+                  if (justSelectedRef.current) return;
+
+                  // If selection is empty, make sure custom selection and highlights are cleared
+                  if (onSelectionRef.current) {
+                    onSelectionRef.current(null);
+                  }
+                  if (activeHighlightRangeRef.current) {
+                    try {
+                      newRendition.annotations.remove(activeHighlightRangeRef.current, "highlight");
+                    } catch (err) {}
+                    activeHighlightRangeRef.current = null;
+                  }
+                }
+              } catch (e) {
+                console.error("Manual selection processing failed:", e);
+              }
+            };
+
+            // Touch or Mouse release: clear native selection handles and native popup menu
+            const handleTouchOrMouseEnd = () => {
+              setTimeout(() => {
+                try {
+                  const sel = iframeDoc.getSelection();
+                  const text = sel?.toString().trim() || '';
+                  if (text && text.length > 0) {
+                    // Set flag to prevent click/tap event from toggling the HUD
+                    justSelectedRef.current = true;
+                    setTimeout(() => {
+                      justSelectedRef.current = false;
+                    }, 350);
+
+                    // Clear native selection so native copy/paste bubble disappears
+                    sel.removeAllRanges();
+                  }
+                } catch (e) {}
+              }, 80);
+            };
+
+            iframeDoc.addEventListener('selectionchange', handleSelectionChange);
+            iframeDoc.addEventListener('mouseup', handleTouchOrMouseEnd);
+            iframeDoc.addEventListener('touchend', handleTouchOrMouseEnd);
+          }
+
           if (onTextExtractRef.current) {
             try {
               const text = view?.document?.body?.innerText
@@ -164,10 +273,14 @@ export default function EpubReader({
           const displayedTotal = location.start.displayed?.total || 1;
           const chapterTitle = location.start.label || 'Sem Título';
 
-          let percent = 0;
+          let percent = undefined;
           if (newBook.locations.length() > 0) {
             percent = Math.round(newBook.locations.percentageFromCfi(cfi) * 100);
             setProgress(percent);
+          }
+          
+          if (bookId && cfi) {
+            updateProgress(bookId, cfi, percent);
           }
 
           const curPage = newBook.locations.length() > 0 
@@ -192,45 +305,28 @@ export default function EpubReader({
 
           if (bookId) {
             setTimeout(() => {
-              saveBook(file, bookId, {
-                ...metadataRef.current,
-                progressLocation: cfi,
-                progressPercent: percent
-              });
+              updateProgress(bookId, cfi, percent);
             }, 500);
-          }
-        });
-
-        newRendition.on('selected', (cfiRange, contents) => {
-          const sel = contents.window.getSelection();
-          const text = sel.toString().trim();
-          if (text && onSelectionRef.current) {
-            try {
-              const range = sel.getRangeAt(0);
-              const rect = range.getBoundingClientRect();
-              const iframe = viewerRef.current?.querySelector('iframe');
-              const iframeRect = iframe ? iframe.getBoundingClientRect() : { left: 0, top: 0 };
-
-              onSelectionRef.current({
-                text,
-                x: iframeRect.left + rect.left + (rect.width / 2),
-                y: iframeRect.top + rect.top + window.scrollY - 10
-              });
-            } catch (e) {
-              console.error("Selection calculation failed:", e);
-            }
           }
         });
 
         newRendition.on('click', () => {
           setTimeout(() => {
             try {
+              if (justSelectedRef.current) return;
               const iframe = viewerRef.current?.querySelector('iframe');
               const sel = iframe?.contentWindow?.getSelection();
               const text = sel?.toString().trim() || '';
               if (!text) {
                 if (onSelectionRef.current) onSelectionRef.current(null);
                 if (onPageClickRef.current) onPageClickRef.current();
+
+                if (activeHighlightRangeRef.current) {
+                  try {
+                    newRendition.annotations.remove(activeHighlightRangeRef.current, "highlight");
+                  } catch (err) {}
+                  activeHighlightRangeRef.current = null;
+                }
               }
             } catch {}
           }, 100);
@@ -315,6 +411,12 @@ export default function EpubReader({
         'padding': '1px 3px',
         'box-shadow': '0 0 3px rgba(245, 158, 11, 0.3)',
         'transition': 'background-color 0.2s ease'
+      },
+      '.custom-highlight': {
+        'background-color': 'rgba(99, 102, 241, 0.3) !important',
+        'border-radius': '4px',
+        'padding': '1px 3px',
+        'box-shadow': '0 0 3px rgba(99, 102, 241, 0.3)'
       }
     });
 
@@ -335,6 +437,16 @@ export default function EpubReader({
       }
     }
   }, [goToLocation, rendition, book]);
+
+  // Clear selection highlight if customSelection is cleared externally
+  useEffect(() => {
+    if (!customSelection && activeHighlightRangeRef.current && rendition) {
+      try {
+        rendition.annotations.remove(activeHighlightRangeRef.current, "highlight");
+      } catch (err) {}
+      activeHighlightRangeRef.current = null;
+    }
+  }, [customSelection, rendition]);
 
   const next = () => {
     if (rendition) rendition.next().then(() => animateIn('next'));

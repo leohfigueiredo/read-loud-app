@@ -6,8 +6,8 @@
   --bg-secondary: #ffffff;
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --accent-color: #6366f1;
-  --accent-hover: #4f46e5;
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
   --border-color: #e2e8f0;
   
   /* Legacy/Missing Variables Mapping */
@@ -17,9 +17,13 @@
   --hover-bg: #e2e8f0;
   
   /* Fonts */
-  --font-ui: 'Inter', sans-serif;
-  --font-heading: 'Outfit', sans-serif;
+  --font-ui: var(--main-font, 'Inter', sans-serif);
+  --font-heading: var(--main-font, 'Outfit', sans-serif);
   --font-reading: 'Lora', serif; /* Default reading font */
+  --main-font: 'Inter'; /* Dynamic UI font */
+  
+  /* Shapes */
+  --radius-shape: 8px;
   
   /* Bionic Reading Colors */
   --bionic-bold: 700;
@@ -28,7 +32,7 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.3);
+  --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.3);
   
   /* Transitions */
   --transition-fast: 0.15s ease;
@@ -41,8 +45,8 @@
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --border-color: #334155;
-  --accent-color: #818cf8;
-  --accent-hover: #6366f1;
+  --accent-color: #60a5fa;
+  --accent-hover: #3b82f6;
   
   /* Legacy/Missing Variables Mapping */
   --text-color: #f8fafc;
@@ -64,14 +68,53 @@
   --accent-color: #d97706;
   --accent-hover: #b45309;
   
-  /* Legacy/Missing Variables Mapping */
+  /* Legacy mapping */
   --text-color: #451a03;
   --input-bg: #fde68a;
   --panel-bg: #fffbeb;
   --hover-bg: #fcd34d;
-  
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+}
+
+/* UI THEMES (data-ui-theme) */
+[data-ui-theme='windows-mica'] {
+  --panel-bg: rgba(255, 255, 255, 0.6);
+  --input-bg: rgba(255, 255, 255, 0.4);
+  --hover-bg: rgba(255, 255, 255, 0.8);
+  --bg-color: linear-gradient(135deg, #e0eafc, #cfdef3);
+}
+
+[data-ui-theme='windows-mica'][data-theme='dark'] {
+  --panel-bg: rgba(30, 41, 59, 0.6);
+  --input-bg: rgba(15, 23, 42, 0.4);
+  --hover-bg: rgba(51, 65, 85, 0.8);
+  --bg-color: linear-gradient(135deg, #0f172a, #1e293b);
+}
+
+[data-ui-theme='windows-mica'][data-theme='night'] {
+  --panel-bg: rgba(255, 251, 235, 0.6);
+  --input-bg: rgba(253, 230, 138, 0.4);
+  --hover-bg: rgba(252, 211, 77, 0.8);
+  --bg-color: linear-gradient(135deg, #fef3c7, #fde68a);
+}
+
+[data-ui-theme='light'] {
+  --bg-color: #f8fafc;
+  --panel-bg: #ffffff;
+  --input-bg: #f1f5f9;
+  --hover-bg: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-color: #0f172a;
+}
+
+[data-ui-theme='dark'] {
+  --bg-color: #0f172a;
+  --panel-bg: #1e293b;
+  --input-bg: #334155;
+  --hover-bg: #475569;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-color: #f8fafc;
 }
 
 * {

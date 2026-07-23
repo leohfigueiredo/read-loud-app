@@ -511,6 +511,7 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
             onToggleUI={toggleCleanMode} 
             theme={theme} 
             onSelection={setCustomSelection}
+            customSelection={customSelection}
             fontSize={fontSize}
             fontFamily={fontFamily}
             lineHeight={lineHeight}
@@ -544,7 +545,9 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
             </div>
             
             <div className="footer-details" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: 'var(--text-secondary)', alignItems: 'center' }}>
-              <span className="chapter-title" style={{ fontWeight: '500' }}>{progressInfo.chapterTitle || 'Início'}</span>
+              <span className="chapter-title" style={{ fontWeight: '500' }}>
+                {progressInfo.chapterTitle === 'Sem Título' ? '' : (progressInfo.chapterTitle || 'Início')}
+              </span>
               <span className="page-stats">
                 Página {progressInfo.currentPage} de {progressInfo.totalPages}
                 {bookData.metadata.type === 'epub' && progressInfo.totalInChapter > 1 && (
@@ -556,26 +559,32 @@ export default function Reader({ theme, bionic, setTheme, setBionic }) {
         </footer>
       )}
       
-      {!cleanMode && (
-         <>
-            <SelectionMenu 
-              onReadAloud={handleReadAloud} 
-              customSelection={customSelection} 
-              onClearSelection={() => setCustomSelection(null)}
-              onSaveNote={handleAddNote}
-            />
-            <TextToSpeech textToRead={ttsText || currentPageText} hudActive={hudActive} />
-         </>
-      )}
+      <SelectionMenu 
+        onReadAloud={handleReadAloud} 
+        customSelection={customSelection} 
+        onClearSelection={() => setCustomSelection(null)}
+        onSaveNote={handleAddNote}
+      />
+      <TextToSpeech 
+        bookId={id} 
+        currentLocation={progressInfo.currentLocationCfi || progressInfo.currentPage} 
+        textToRead={ttsText || currentPageText} 
+        hudActive={hudActive} 
+      />
 
       {cleanMode && (
-        <button 
-          className="exit-clean-btn" 
-          onClick={toggleCleanMode}
-          title="Sair da Leitura Limpa (Minimizar)"
-        >
-          <Minimize2 size={20} />
-        </button>
+        <>
+          <button 
+            className="exit-clean-btn" 
+            onClick={toggleCleanMode}
+            title="Sair da Leitura Limpa (Minimizar)"
+          >
+            <Minimize2 size={20} />
+          </button>
+          <div className="clean-mode-page-indicator">
+            {progressInfo.currentPage} / {progressInfo.totalPages}
+          </div>
+        </>
       )}
 
       {showSettings && (
